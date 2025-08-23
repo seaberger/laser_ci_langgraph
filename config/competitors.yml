@@ -1,0 +1,50 @@
+vendors:
+  - name: Coherent
+    homepage: "https://www.coherent.com"
+    segments:
+      - id: diode_instrumentation
+        products:
+          - name: "OBIS LX/LS"
+            product_url: "https://www.coherent.com/lasers/cw-solid-state/obis-ls-lx"
+            datasheets:
+              - "https://www.coherent.com/resources/datasheet/lasers/obis-family-ds.pdf"
+      - id: light_engines
+        products:
+          - name: "OBIS CellX"
+            product_url: "https://www.coherent.com/lasers/laser-engine/cellx"
+            datasheets:
+              - "https://www.coherent.com/resources/datasheet/lasers/cellx-ds.pdf"
+          - name: "OBIS Galaxy"
+            product_url: "https://www.coherent.com/lasers/laser-engine/galaxy"
+            datasheets:
+              - "https://www.coherent.com/resources/datasheet/lasers/obis-galaxy-integrated-system-ds.pdf"
+
+  - name: Hübner Photonics (Cobolt)
+    homepage: "https://hubner-photonics.com"
+    segments:
+      - id: diode_instrumentation
+        products:
+          - name: "Cobolt 06-01 Series"
+            product_url: "https://hubner-photonics.com/products/lasers/diode-lasers/06-01-series/"
+            datasheets:
+              - "https://hubner-photonics.com/wp-content/uploads/2014/11/D0352-O-Datasheet-Cobolt-06-01-Series.pdf"
+
+  - name: Omicron
+    homepage: "https://www.omicron-laser.de"
+    segments:
+      - id: diode_instrumentation
+        products:
+          - name: "LuxX / LuxX+"
+            product_url: "https://www.omicron-laser.de/english/lasers/diode-lasers/luxx-lasers.html"
+            datasheets:
+              - "https://www.omicron-laser.de/files/luxx_plus_datasheet201901.pdf"
+
+  - name: Oxxius
+    homepage: "https://www.oxxius.com"
+    segments:
+      - id: diode_instrumentation
+        products:
+          - name: "LBX LaserBoxx"
+            product_url: "https://www.oxxius.com/products/lbx-375/"
+            datasheets:
+              - "https://www.oxxius.com/wp-content/uploads/2022/08/Oxxius-Datasheet-Continuous-and-Modulated-lasers-2022.pdf"

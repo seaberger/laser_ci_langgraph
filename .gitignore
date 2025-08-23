@@ -1,0 +1,117 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# ML Models and Data
+models/
+*.pkl
+*.pth
+*.h5
+*.ckpt
+
+# Documentation
+docs/_build/
+site/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets and Configuration
+.env
+.env.local
+.env.*.local
+secrets/
+config/local/
+config/tenant_context.json  # Tenant selection context - contains tenant IDs
+.env.lmc                     # Tenant-specific env files
+.env.matrix
+.env.*                       # All other tenant-specific env files
+
+# Private Documents
+docs/IT_DEPARTMENTAL_REVIEW.md  # Internal executive review document
+
+# Cache
+cache/
+.cache/
+*.cache
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+.sesskey
+*.swp
+*.swo
+
+# Project specific
+corpus/  # Large PDF files
+*.pdf    # Optionally ignore all PDFs
+test_page_*.png
+temp_test_scripts/  # Keep test scripts out of main repo
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Distribution
+.pypirc

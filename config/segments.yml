@@ -1,0 +1,7 @@
+segments:
+  - id: diode_instrumentation
+    name: Diode & Instrumentation Lasers
+    notes: CW diode & DPSS modules for bio/measurement; single-mode preferred.
+  - id: light_engines
+    name: Multi-wavelength Light Engines
+    notes: Integrated engines (e.g., CellX, Galaxy) with fiber/output options.
