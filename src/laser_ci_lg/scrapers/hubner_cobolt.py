@@ -14,28 +14,9 @@ class CoboltScraper(BaseScraper):
                 # Use enhanced fetch with caching
                 status, content_type, text, content_hash, file_path, raw_specs = self.fetch_with_cache(tgt["url"])
                 
-                # Check if document with same hash already exists
-                existing = s.query(RawDocument).filter_by(
-                    url=tgt["url"],
-                    content_hash=content_hash
-                ).first()
-                
-                if existing:
-                    print(f"  → Document unchanged, skipping database insert")
-                    continue
-                
-                s.add(
-                    RawDocument(
-                        product_id=tgt["product_id"],
-                        url=tgt["url"],
-                        http_status=status,
-                        content_type=content_type,
-                        text=text[:2_000_000],
-                        raw_specs=raw_specs if raw_specs else None,
-                        content_hash=content_hash,
-                        file_path=file_path,
-                    )
-                )
+                # Use the base class method for proper duplicate handling
+                self.store_document(s, tgt, status, content_type, text, 
+                                  content_hash, file_path, raw_specs)
             s.commit()
         finally:
             s.close()

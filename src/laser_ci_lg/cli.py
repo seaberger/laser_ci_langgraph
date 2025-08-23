@@ -27,7 +27,7 @@ def run(
         typer.echo(f"Running scraper: {scraper}")
     
     graph = build_graph()
-    final = graph.invoke(
+    result = graph.invoke(
         GraphState(
             config_path=config_path, 
             openai_model=model, 
@@ -36,6 +36,13 @@ def run(
             scraper_filter=scraper
         )
     )
+    
+    # Handle both dict and GraphState returns
+    if hasattr(result, 'report_md'):
+        final = result
+    else:
+        final = GraphState(**result)
+    
     typer.echo(final.report_md or "# Report generation failed\n")
     if final.bench_rows:
         typer.echo("\n## Benchmark vs Coherent (diode_instrumentation)\n")
