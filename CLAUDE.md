@@ -11,13 +11,22 @@ Laser CI (Competitive Intelligence) - An automated pipeline for monitoring laser
 ### Running the Pipeline
 ```bash
 # One-time execution
-uv run python src/laser_ci_lg/cli.py run
+uv run python -m src.laser_ci_lg.cli run
 
-# With custom OpenAI model
-uv run python src/laser_ci_lg/cli.py run --model gpt-4o
+# Run specific scraper only
+uv run python -m src.laser_ci_lg.cli run --scraper coherent
+uv run python -m src.laser_ci_lg.cli run --scraper hubner  # or cobolt
+uv run python -m src.laser_ci_lg.cli run --scraper omicron # or luxx
+uv run python -m src.laser_ci_lg.cli run --scraper oxxius  # or lbx
+
+# Force refresh (bypass cache)
+uv run python -m src.laser_ci_lg.cli run --force-refresh
+
+# Combine options
+uv run python -m src.laser_ci_lg.cli run --scraper coherent --force-refresh --model gpt-4o
 
 # Schedule monthly runs (cron format: M H DOM MON DOW)
-uv run python src/laser_ci_lg/cli.py schedule --cron "3 10 1 * *"
+uv run python -m src.laser_ci_lg.cli schedule --cron "3 10 1 * *"
 ```
 
 ### Environment Setup

@@ -17,6 +17,7 @@ class GraphState(BaseModel):
     openai_model: Optional[str] = None
     use_llm: bool = True
     force_refresh: bool = False
+    scraper_filter: Optional[str] = None
 
 
 def node_bootstrap(state: GraphState) -> GraphState:
@@ -30,7 +31,11 @@ def node_bootstrap(state: GraphState) -> GraphState:
 
 def node_crawl(state: GraphState) -> GraphState:
     try:
-        run_scrapers_from_config(state.config_path, force_refresh=state.force_refresh)
+        run_scrapers_from_config(
+            state.config_path, 
+            force_refresh=state.force_refresh,
+            scraper_filter=state.scraper_filter
+        )
         state.crawled = 1
     except Exception as e:
         state.errors.append(f"crawl: {e}")

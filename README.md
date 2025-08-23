@@ -47,7 +47,13 @@ echo "OPENAI_API_KEY=sk-..." > .env
 # optional: echo "OPENAI_MODEL=gpt-4o-mini" >> .env
 
 # Run commands with uv
-uv run python src/laser_ci_lg/cli.py --help
+uv run python -m src.laser_ci_lg.cli --help
+
+# Run specific scraper
+uv run python -m src.laser_ci_lg.cli run --scraper coherent
+
+# Force refresh for specific vendor
+uv run python -m src.laser_ci_lg.cli run --scraper hubner --force-refresh
 
 ---
 

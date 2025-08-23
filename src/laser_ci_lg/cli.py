@@ -16,19 +16,24 @@ def run(
     use_llm: bool = typer.Option(True, help="Use LLM for spec normalization fallback"),
     config_path: str = typer.Option("config/competitors.yml", help="Path to config file"),
     force_refresh: bool = typer.Option(False, help="Force re-download and re-process all documents"),
+    scraper: str = typer.Option(None, help="Run specific scraper (e.g., coherent, hubner, omicron, oxxius)"),
 ):
     """Run end-to-end pipeline once."""
     if not os.getenv("OPENAI_API_KEY"):
         typer.echo(
             "Warning: OPENAI_API_KEY not set; LLM fallback will fail if enabled."
         )
+    if scraper:
+        typer.echo(f"Running scraper: {scraper}")
+    
     graph = build_graph()
     final = graph.invoke(
         GraphState(
             config_path=config_path, 
             openai_model=model, 
             use_llm=use_llm,
-            force_refresh=force_refresh
+            force_refresh=force_refresh,
+            scraper_filter=scraper
         )
     )
     typer.echo(final.report_md or "# Report generation failed\n")

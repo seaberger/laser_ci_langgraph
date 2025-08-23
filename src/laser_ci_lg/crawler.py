@@ -42,7 +42,7 @@ def seed_from_config(path="config/competitors.yml"):
         s.close()
 
 
-def run_scrapers_from_config(path="config/competitors.yml", force_refresh=False):
+def run_scrapers_from_config(path="config/competitors.yml", force_refresh=False, scraper_filter=None):
     yaml = YAML(typ="safe")
     with open(path) as f:
         cfg = yaml.load(f)
@@ -84,8 +84,42 @@ def run_scrapers_from_config(path="config/competitors.yml", force_refresh=False)
         finally:
             s2.close()
 
+    def should_run_scraper(vendor_name: str, scraper_filter: str) -> bool:
+        """Check if a scraper should run based on the filter"""
+        if not scraper_filter:
+            return True
+        
+        # Normalize names for comparison
+        vendor_lower = vendor_name.lower()
+        filter_lower = scraper_filter.lower().replace('.py', '')
+        
+        # Check various matching patterns
+        if filter_lower in vendor_lower:
+            return True
+        
+        # Check specific mappings
+        mappings = {
+            'coherent': ['coherent'],
+            'hubner': ['hübner', 'hubner', 'cobolt'],
+            'cobolt': ['hübner', 'hubner', 'cobolt'],
+            'omicron': ['omicron'],
+            'oxxius': ['oxxius'],
+            'luxx': ['omicron'],
+            'lbx': ['oxxius'],
+        }
+        
+        for key, values in mappings.items():
+            if filter_lower == key:
+                return any(v in vendor_lower for v in values)
+        
+        return False
+    
     scrapers = []
     for v in cfg["vendors"]:
+        # Check if this vendor should be processed
+        if scraper_filter and not should_run_scraper(v["name"], scraper_filter):
+            continue
+            
         for seg in v["segments"]:
             t = make_targets(v["name"], seg)
             if v["name"].startswith("Coherent"):
@@ -96,6 +130,16 @@ def run_scrapers_from_config(path="config/competitors.yml", force_refresh=False)
                 scrapers.append(OmicronLuxxScraper(t, force_refresh=force_refresh))
             elif v["name"] == "Oxxius":
                 scrapers.append(OxxiusLbxScraper(t, force_refresh=force_refresh))
+    
+    if not scrapers and scraper_filter:
+        print(f"No scrapers matched filter: '{scraper_filter}'")
+        print("\nAvailable scrapers:")
+        print("  - coherent")
+        print("  - hubner (or cobolt)")
+        print("  - omicron (or luxx)")
+        print("  - oxxius (or lbx)")
+        return
+    
     for sc in scrapers:
         print(f"\nRunning {sc.vendor()} scraper...")
         sc.run()
