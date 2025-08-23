@@ -1,7 +1,6 @@
 from .base import BaseScraper
 from ..db import SessionLocal
 from ..models import RawDocument
-import requests
 
 
 class CoboltScraper(BaseScraper):
@@ -12,25 +11,18 @@ class CoboltScraper(BaseScraper):
         s = SessionLocal()
         try:
             for tgt in self.iter_targets():
-                # Fetch the content
-                r = requests.get(tgt["url"], timeout=30)
-                status = r.status_code
+                # Use enhanced fetch with caching
+                status, content_type, text, content_hash, file_path, raw_specs = self.fetch_with_cache(tgt["url"])
                 
-                # Determine content type
-                is_pdf = (
-                    tgt["url"].lower().endswith(".pdf") or
-                    "application/pdf" in r.headers.get("content-type", "")
-                )
+                # Check if document with same hash already exists
+                existing = s.query(RawDocument).filter_by(
+                    url=tgt["url"],
+                    content_hash=content_hash
+                ).first()
                 
-                if is_pdf:
-                    # Use Docling for PDF extraction
-                    text, raw_specs = self.extract_pdf_specs_with_docling(r.content)
-                    content_type = "pdf_text"
-                else:
-                    # Use enhanced HTML extraction
-                    text = r.text
-                    raw_specs = self.extract_all_html_specs(text)
-                    content_type = "html"
+                if existing:
+                    print(f"  → Document unchanged, skipping database insert")
+                    continue
                 
                 s.add(
                     RawDocument(
@@ -40,6 +32,8 @@ class CoboltScraper(BaseScraper):
                         content_type=content_type,
                         text=text[:2_000_000],
                         raw_specs=raw_specs if raw_specs else None,
+                        content_hash=content_hash,
+                        file_path=file_path,
                     )
                 )
             s.commit()

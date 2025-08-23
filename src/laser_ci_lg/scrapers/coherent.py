@@ -1,7 +1,6 @@
 from .base import BaseScraper
 from ..db import SessionLocal
 from ..models import RawDocument
-import requests
 
 
 class CoherentScraper(BaseScraper):
@@ -12,41 +11,33 @@ class CoherentScraper(BaseScraper):
         s = SessionLocal()
         try:
             for tgt in self.iter_targets():
-                # Fetch the content
-                r = requests.get(tgt["url"], timeout=30)
-                status = r.status_code
+                # Use enhanced fetch with caching
+                status, content_type, text, content_hash, file_path, raw_specs = self.fetch_with_cache(tgt["url"])
                 
-                # Determine content type
-                is_pdf = (
-                    tgt["url"].lower().endswith(".pdf") or
-                    "application/pdf" in r.headers.get("content-type", "")
-                )
+                # For PDFs without extracted specs, try parsing markdown text
+                if content_type == "pdf_text" and not raw_specs:
+                    lines = text.split('\n')
+                    raw_specs = {}
+                    for line in lines:
+                        if ':' in line and len(line) < 200:  # Likely a spec line
+                            parts = line.split(':', 1)
+                            if len(parts) == 2:
+                                k = parts[0].strip().replace('*', '').replace('#', '')
+                                v = parts[1].strip()
+                                if k and v:
+                                    raw_specs[k] = v
                 
-                if is_pdf:
-                    # Use Docling for PDF extraction
-                    text, raw_specs = self.extract_pdf_specs_with_docling(r.content)
-                    content_type = "pdf_text"
-                    
-                    # If no specs extracted from tables, try parsing the text
-                    if not raw_specs:
-                        # Extract specs from markdown text
-                        lines = text.split('\n')
-                        raw_specs = {}
-                        for line in lines:
-                            if ':' in line and len(line) < 200:  # Likely a spec line
-                                parts = line.split(':', 1)
-                                if len(parts) == 2:
-                                    k = parts[0].strip().replace('*', '').replace('#', '')
-                                    v = parts[1].strip()
-                                    if k and v:
-                                        raw_specs[k] = v
-                else:
-                    # Use enhanced HTML extraction
-                    text = r.text
-                    raw_specs = self.extract_all_html_specs(text)
-                    content_type = "html"
+                # Check if document with same hash already exists
+                existing = s.query(RawDocument).filter_by(
+                    url=tgt["url"],
+                    content_hash=content_hash
+                ).first()
                 
-                # Store the document with extracted specs
+                if existing:
+                    print(f"  → Document unchanged, skipping database insert")
+                    continue
+                
+                # Store the new/changed document
                 s.add(
                     RawDocument(
                         product_id=tgt["product_id"],
@@ -55,6 +46,8 @@ class CoherentScraper(BaseScraper):
                         content_type=content_type,
                         text=text[:2_000_000],
                         raw_specs=raw_specs if raw_specs else None,
+                        content_hash=content_hash,
+                        file_path=file_path,
                     )
                 )
             s.commit()

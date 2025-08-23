@@ -42,7 +42,7 @@ def seed_from_config(path="config/competitors.yml"):
         s.close()
 
 
-def run_scrapers_from_config(path="config/competitors.yml"):
+def run_scrapers_from_config(path="config/competitors.yml", force_refresh=False):
     yaml = YAML(typ="safe")
     with open(path) as f:
         cfg = yaml.load(f)
@@ -89,12 +89,13 @@ def run_scrapers_from_config(path="config/competitors.yml"):
         for seg in v["segments"]:
             t = make_targets(v["name"], seg)
             if v["name"].startswith("Coherent"):
-                scrapers.append(CoherentScraper(t))
+                scrapers.append(CoherentScraper(t, force_refresh=force_refresh))
             elif "Hübner" in v["name"] or "Cobolt" in v["name"]:
-                scrapers.append(CoboltScraper(t))
+                scrapers.append(CoboltScraper(t, force_refresh=force_refresh))
             elif v["name"] == "Omicron":
-                scrapers.append(OmicronLuxxScraper(t))
+                scrapers.append(OmicronLuxxScraper(t, force_refresh=force_refresh))
             elif v["name"] == "Oxxius":
-                scrapers.append(OxxiusLbxScraper(t))
+                scrapers.append(OxxiusLbxScraper(t, force_refresh=force_refresh))
     for sc in scrapers:
+        print(f"\nRunning {sc.vendor()} scraper...")
         sc.run()

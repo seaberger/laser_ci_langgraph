@@ -15,6 +15,7 @@ def run(
     model: str = typer.Option(None, help="OpenAI model (e.g., gpt-4o-mini)"),
     use_llm: bool = typer.Option(True, help="Use LLM for spec normalization fallback"),
     config_path: str = typer.Option("config/competitors.yml", help="Path to config file"),
+    force_refresh: bool = typer.Option(False, help="Force re-download and re-process all documents"),
 ):
     """Run end-to-end pipeline once."""
     if not os.getenv("OPENAI_API_KEY"):
@@ -23,7 +24,12 @@ def run(
         )
     graph = build_graph()
     final = graph.invoke(
-        GraphState(config_path=config_path, openai_model=model, use_llm=use_llm)
+        GraphState(
+            config_path=config_path, 
+            openai_model=model, 
+            use_llm=use_llm,
+            force_refresh=force_refresh
+        )
     )
     typer.echo(final.report_md or "# Report generation failed\n")
     if final.bench_rows:

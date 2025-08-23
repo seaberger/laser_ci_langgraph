@@ -50,6 +50,8 @@ class RawDocument(Base):
     content_type: Mapped[str | None] = mapped_column(String(32))  # html|pdf_text
     text: Mapped[str] = mapped_column(Text)
     raw_specs: Mapped[dict | None] = mapped_column(JSON)
+    content_hash: Mapped[str | None] = mapped_column(String(64))  # SHA-256 hash
+    file_path: Mapped[str | None] = mapped_column(String(500))  # Local cache path for PDFs
 
 
 class NormalizedSpec(Base):
