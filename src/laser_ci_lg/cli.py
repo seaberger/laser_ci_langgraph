@@ -12,9 +12,9 @@ app = typer.Typer(help="Laser Competitor Intelligence (LangGraph + OpenAI)")
 
 @app.command()
 def run(
-    model: str = typer.Option(None, help="OpenAI model (e.g., gpt-4o-mini)."),
-    use_llm: bool = typer.Option(True, help="Use LLM for spec normalization fallback."),
-    config_path: str = "config/competitors.yml",
+    model: str = typer.Option(None, help="OpenAI model (e.g., gpt-4o-mini)"),
+    use_llm: bool = typer.Option(True, help="Use LLM for spec normalization fallback"),
+    config_path: str = typer.Option("config/competitors.yml", help="Path to config file"),
 ):
     """Run end-to-end pipeline once."""
     if not os.getenv("OPENAI_API_KEY"):
@@ -37,10 +37,10 @@ def run(
 
 @app.command()
 def schedule(
-    cron: str = "3 10 1 * *",
-    model: str = None,
-    use_llm: bool = True,
-    config_path: str = "config/competitors.yml",
+    cron: str = typer.Option("3 10 1 * *", help="Cron expression"),
+    model: str = typer.Option(None, help="OpenAI model"),
+    use_llm: bool = typer.Option(True, help="Use LLM for normalization"),
+    config_path: str = typer.Option("config/competitors.yml", help="Config file path"),
 ):
     """
     Schedule a monthly run (default: 03:10 on the 1st).

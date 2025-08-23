@@ -61,12 +61,14 @@ def llm_normalize(
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     prompt = {"raw_specs": raw_specs, "context": free_text[:8000]}
-    resp = client.responses.create(
+    resp = client.chat.completions.create(
         model=model,
         temperature=0,
-        system=SYSTEM,
-        response_format={"type": "json_schema", "json_schema": SCHEMA},
-        input=[{"role": "user", "content": json.dumps(prompt)}],
+        messages=[
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": json.dumps(prompt)}
+        ],
+        response_format={"type": "json_object"},
     )
-    out = resp.output[0].content[0].text  # JSON string
+    out = resp.choices[0].message.content  # JSON string
     return json.loads(out)

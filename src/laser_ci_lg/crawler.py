@@ -1,14 +1,10 @@
 from ruamel.yaml import YAML
-from .db import get_engine, SessionLocal
-from .models import Base, Manufacturer, Product
+from .db import SessionLocal, bootstrap_db
+from .models import Manufacturer, Product
 from .scrapers.coherent import CoherentScraper
 from .scrapers.hubner_cobolt import CoboltScraper
-from .scrapers.omicron_luxx import OmicronLuxXScraper
-from .scrapers.oxxius_lbx import OxxiusLBXScraper
-
-
-def bootstrap_db():
-    Base.metadata.create_all(get_engine())
+from .scrapers.omicron_luxx import OmicronLuxxScraper
+from .scrapers.oxxius_lbx import OxxiusLbxScraper
 
 
 def seed_from_config(path="config/competitors.yml"):
@@ -97,8 +93,8 @@ def run_scrapers_from_config(path="config/competitors.yml"):
             elif "Hübner" in v["name"] or "Cobolt" in v["name"]:
                 scrapers.append(CoboltScraper(t))
             elif v["name"] == "Omicron":
-                scrapers.append(OmicronLuxXScraper(t))
+                scrapers.append(OmicronLuxxScraper(t))
             elif v["name"] == "Oxxius":
-                scrapers.append(OxxiusLBXScraper(t))
+                scrapers.append(OxxiusLbxScraper(t))
     for sc in scrapers:
         sc.run()
