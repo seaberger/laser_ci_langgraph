@@ -318,11 +318,20 @@ class AdvancedPDFExtractor:
         specs = {}
         
         try:
-            # Get table as DataFrame if possible
+            # Try multiple methods to extract table data
+            
+            # Method 1: Try to get as DataFrame
             if hasattr(table, 'to_dataframe'):
-                df = table.to_dataframe()
-                specs.update(self._dataframe_to_specs(df))
-            elif hasattr(table, 'data'):
+                try:
+                    df = table.to_dataframe()
+                    specs.update(self._dataframe_to_specs(df))
+                    if specs:  # If we got data, return it
+                        return specs
+                except:
+                    pass
+            
+            # Method 2: Try to get table data directly
+            if hasattr(table, 'data'):
                 # Process raw table data
                 table_data = table.data
                 if hasattr(table_data, '__len__') and len(table_data) > 0:
@@ -366,6 +375,24 @@ class AdvancedPDFExtractor:
                                         specs[spec_name] = self._parse_technical_value(values[0])
                                     else:
                                         specs[spec_name] = [self._parse_technical_value(v) for v in values]
+            
+            # Method 3: Try to extract from table's text representation
+            if hasattr(table, 'text') or hasattr(table, '__str__'):
+                table_text = str(table.text if hasattr(table, 'text') else table)
+                # Parse markdown table format
+                lines = table_text.split('\n')
+                for line in lines:
+                    if '|' in line and not line.startswith('|---'):
+                        cells = [cell.strip() for cell in line.split('|') if cell.strip()]
+                        if len(cells) >= 2:
+                            key = cells[0]
+                            values = cells[1:]
+                            if key and not key.lower() in ['parameter', 'specification', '']:
+                                if len(values) == 1:
+                                    specs[key] = self._parse_technical_value(values[0])
+                                else:
+                                    specs[key] = [self._parse_technical_value(v) for v in values]
+                                    
         except Exception as e:
             # Continue even if table processing fails
             pass
@@ -377,21 +404,64 @@ class AdvancedPDFExtractor:
         specs = {}
         lines = text.split('\n')
         
-        for line in lines:
+        # Parse markdown tables
+        in_table = False
+        table_headers = []
+        
+        for i, line in enumerate(lines):
             # Skip empty lines
             if not line.strip():
+                in_table = False
+                table_headers = []
                 continue
             
+            # Detect markdown table
+            if '|' in line:
+                cells = [cell.strip() for cell in line.split('|')]
+                cells = [c for c in cells if c]  # Remove empty cells
+                
+                # Check if this is a separator line
+                if any('---' in cell for cell in cells):
+                    in_table = True
+                    # Previous line should be headers
+                    if i > 0 and '|' in lines[i-1]:
+                        header_cells = [h.strip() for h in lines[i-1].split('|')]
+                        table_headers = [h for h in header_cells if h]
+                    continue
+                
+                # Process table row
+                if in_table and len(cells) >= 2:
+                    spec_name = cells[0]
+                    if spec_name and not spec_name.lower() in ['specifications', 'parameter', '']:
+                        if len(table_headers) > 1 and len(cells) == len(table_headers):
+                            # Map to headers
+                            for j in range(1, len(cells)):
+                                if j < len(table_headers):
+                                    key = f"{spec_name}_{table_headers[j]}"
+                                    value = cells[j]
+                                    if value and value not in ['-', 'N/A', '']:
+                                        specs[key] = self._parse_technical_value(value)
+                        else:
+                            # No headers or mismatch, just extract values
+                            values = cells[1:]
+                            values = [v for v in values if v and v not in ['-', 'N/A', '']]
+                            if values:
+                                if len(values) == 1:
+                                    specs[spec_name] = self._parse_technical_value(values[0])
+                                else:
+                                    specs[spec_name] = [self._parse_technical_value(v) for v in values]
+            
             # Look for spec patterns with colons (but don't split ratios)
-            if ':' in line:
+            elif ':' in line:
                 # Check if it's a ratio (e.g., "50:1")
                 if re.search(r'\d+\s*:\s*\d+', line):
-                    # It's a ratio, extract the whole thing
-                    parts = line.split(' ', 1)
-                    if len(parts) == 2:
-                        key = parts[0].strip().replace('*', '').replace('#', '')
-                        value = parts[1].strip()
-                        if key and value:
+                    # It's a ratio, try to extract the spec name and value
+                    # Pattern: "Polarization Ratio: >50:1"
+                    match = re.match(r'^([^:]+?):\s*([<>≤≥]?\s*\d+\s*:\s*\d+.*)$', line)
+                    if match:
+                        key = match.group(1).strip().replace('*', '').replace('#', '')
+                        value = match.group(2).strip()
+                        if key and value and len(key) < 100:
                             specs[key] = value
                 else:
                     # Regular key:value pattern
@@ -401,15 +471,53 @@ class AdvancedPDFExtractor:
                         value = parts[1].strip()
                         if key and value and len(key) < 100:  # Reasonable key length
                             specs[key] = self._parse_technical_value(value)
-            
-            # Look for patterns like "Parameter Value Unit"
-            elif '|' in line:
-                parts = line.split('|')
-                if len(parts) >= 2:
-                    key = parts[0].strip()
-                    value = '|'.join(parts[1:]).strip()
-                    if key and value:
-                        specs[key] = self._parse_technical_value(value)
+        
+        # Extract using regex patterns on full text
+        pattern_specs = self._extract_pattern_specs(text)
+        specs.update(pattern_specs)
+        
+        return specs
+    
+    def _extract_pattern_specs(self, text: str) -> Dict[str, Any]:
+        """Extract specs using regex patterns."""
+        specs = {}
+        
+        # M² (beam quality)
+        m2_matches = re.findall(r'M[²2]\s*(?:\(.*?\))?\s*([<>≤≥]?\s*\d+(?:\.\d+)?)', text)
+        if m2_matches:
+            specs['beam_quality_m2'] = m2_matches[0] if len(m2_matches) == 1 else m2_matches
+        
+        # Wavelength with context
+        wavelength_matches = re.findall(
+            r'(?:Wavelength|λ).*?(\d+(?:\.\d+)?)\s*(?:±\s*\d+(?:\.\d+)?)?\s*(nm|μm)',
+            text, re.IGNORECASE
+        )
+        if wavelength_matches:
+            specs['wavelengths'] = [f"{v}{u}" for v, u in wavelength_matches]
+        
+        # Power specifications
+        power_matches = re.findall(
+            r'(?:Output Power|Power).*?(\d+(?:\.\d+)?)\s*(?:-\s*\d+(?:\.\d+)?)?\s*(mW|W)',
+            text, re.IGNORECASE
+        )
+        if power_matches:
+            specs['power_specs'] = [f"{v}{u}" for v, u in power_matches]
+        
+        # Noise specifications
+        noise_matches = re.findall(
+            r'(?:RMS Noise|Noise).*?([<>≤≥]?\s*\d+(?:\.\d+)?)\s*%',
+            text, re.IGNORECASE
+        )
+        if noise_matches:
+            specs['noise_specs'] = noise_matches
+        
+        # Temperature range
+        temp_matches = re.findall(
+            r'(?:Operating Temperature|Temperature).*?(-?\d+)\s*(?:to|–)\s*\+?(-?\d+)\s*°?C',
+            text, re.IGNORECASE
+        )
+        if temp_matches:
+            specs['temperature_range'] = [f"{t1} to {t2}°C" for t1, t2 in temp_matches]
         
         return specs
     
