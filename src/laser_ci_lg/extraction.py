@@ -152,6 +152,16 @@ class AdvancedHTMLExtractor:
                     # First cell is usually the spec name
                     spec_name = cells[0].get_text(' ', strip=True)
                     
+                    # Check for concatenated product table (Omicron issue)
+                    # If the value contains multiple product models, split them
+                    if any(pattern in spec_name for pattern in ['Wavelength', 'Power', 'Model']):
+                        # This might be a header or concatenated table
+                        all_text = ' '.join([cell.get_text(' ', strip=True) for cell in cells])
+                        extracted = self._extract_from_concatenated_table(all_text)
+                        if extracted:
+                            specs.update(extracted)
+                            continue
+                    
                     # Extract values from ALL columns
                     if len(headers) > 0:
                         # Map to headers
@@ -166,7 +176,15 @@ class AdvancedHTMLExtractor:
                         values = [cell.get_text(' ', strip=True) for cell in cells[1:]]
                         values = [v for v in values if v and v not in ['', '-', 'N/A']]
                         if values:
-                            if len(values) == 1:
+                            # Check if this looks like a concatenated product list
+                            if len(values) == 1 and len(values[0]) > 500:
+                                # Likely concatenated data, try to extract
+                                extracted = self._extract_from_concatenated_table(values[0])
+                                if extracted:
+                                    specs.update(extracted)
+                                else:
+                                    specs[spec_name] = self._parse_value(values[0])
+                            elif len(values) == 1:
                                 specs[spec_name] = self._parse_value(values[0])
                             else:
                                 specs[spec_name] = [self._parse_value(v) for v in values]
@@ -221,6 +239,33 @@ class AdvancedHTMLExtractor:
         ratios = SpecPattern.RATIO.findall(text)
         if ratios:
             specs['ratios'] = [f"{v1}:{v2}" for v1, v2 in ratios]
+        
+        return specs
+    
+    def _extract_from_concatenated_table(self, text: str) -> Dict[str, Any]:
+        """Extract specs from concatenated product table text (Omicron/LuxX issue)."""
+        specs = {}
+        
+        # Pattern for LuxX/LBX products: "LuxX® 375-20 375nm / 20mW"
+        # or "LBX-405 405nm / 60mW"
+        product_pattern = re.compile(
+            r'((?:LuxX|LBX|Luxx)[®+]?\s*[\d-]+)\s+'  # Product model
+            r'(\d+)\s*nm\s*/\s*(\d+)\s*mW',           # Wavelength / Power
+            re.IGNORECASE
+        )
+        
+        matches = product_pattern.findall(text)
+        for model, wavelength, power in matches:
+            # Clean model name
+            model_clean = model.replace('®', '').replace('\xa0', ' ').strip()
+            specs[f"{model_clean}_wavelength"] = f"{wavelength}nm"
+            specs[f"{model_clean}_power"] = f"{power}mW"
+        
+        # Also extract as lists for aggregate analysis
+        if matches:
+            specs['product_models'] = [m[0].replace('®', '').strip() for m in matches]
+            specs['wavelengths'] = [f"{m[1]}nm" for m in matches]
+            specs['power_levels'] = [f"{m[2]}mW" for m in matches]
         
         return specs
     
@@ -339,12 +384,27 @@ class AdvancedPDFExtractor:
                     headers = []
                     data_start = 0
                     
+                    # Try to detect Oxxius-style table headers
+                    # Headers might be: Emission wavelength | Linewidth | Power stability | Output power | Beam waist | M² | Polarization | Digital mod | Analog mod
+                    oxxius_headers = [
+                        'wavelength', 'linewidth', 'power_stability', 'output_power',
+                        'beam_diameter', 'beam_quality', 'polarization', 'digital_mod', 'analog_mod'
+                    ]
+                    
                     if len(table_data[0]) > 1:
                         # Check if first row looks like headers
                         first_row = [str(cell).lower() for cell in table_data[0]]
-                        if any(keyword in ' '.join(first_row) for keyword in 
-                               ['wavelength', 'power', 'model', 'cellx', '405', '488', '561', '637']):
+                        first_row_text = ' '.join(first_row)
+                        
+                        # Check for known header patterns
+                        if any(keyword in first_row_text for keyword in 
+                               ['wavelength', 'power', 'linewidth', 'beam', 'modulation', 
+                                'model', 'cellx', '405', '488', '561', '637']):
                             headers = table_data[0]
+                            data_start = 1
+                        # Special case: Oxxius tables might have headers in a specific pattern
+                        elif 'emission' in first_row_text or 'fwhm' in first_row_text:
+                            headers = oxxius_headers[:len(table_data[0])]
                             data_start = 1
                     
                     # Process each row
@@ -356,12 +416,20 @@ class AdvancedPDFExtractor:
                             if spec_name.lower() in ['parameter', 'specification', 'spec', 'feature', '']:
                                 continue
                             
+                            # Check for Oxxius model pattern (LBX-XXX, LCX-XXX, LPX-XXX)
+                            is_oxxius_model = bool(re.match(r'^L[BCPX]X-\d+', spec_name))
+                            
                             # Process all columns
                             if len(headers) > 1:
-                                # Map values to headers
+                                # Map values to headers with validation
                                 for i, value in enumerate(row[1:], 1):
                                     if i < len(headers):
                                         header = str(headers[i]).strip()
+                                        
+                                        # For Oxxius tables, use predefined header mapping
+                                        if is_oxxius_model and i <= len(oxxius_headers):
+                                            header = oxxius_headers[i-1]
+                                        
                                         key = f"{spec_name}_{header}" if header else spec_name
                                         value_str = str(value).strip()
                                         if value_str and value_str not in ['', '-', 'N/A', 'None']:
@@ -399,9 +467,118 @@ class AdvancedPDFExtractor:
         
         return specs
     
+    def _parse_markdown_table(self, table_text: str) -> Dict[str, Any]:
+        """Parse a markdown table from Docling output."""
+        specs = {}
+        lines = table_text.strip().split('\n')
+        
+        if len(lines) < 3:  # Need at least header, separator, and one data row
+            return specs
+        
+        # Parse header row - split by | and filter out empty
+        header_line = lines[0]
+        # Split preserving empty cells between pipes
+        header_parts = header_line.split('|')
+        headers = []
+        for part in header_parts:
+            # Keep track of position including empty cells
+            headers.append(part.strip())
+        
+        # Remove first and last if empty (from leading/trailing |)
+        if headers and headers[0] == '':
+            headers = headers[1:]
+        if headers and headers[-1] == '':
+            headers = headers[:-1]
+        
+        # Clean headers - remove multi-word descriptions
+        clean_headers = []
+        for h in headers:
+            h_lower = h.lower()
+            if not h or h == '':  # First column is usually model/empty
+                clean_headers.append('model')
+            elif 'emission' in h_lower and 'wavelength' in h_lower:
+                clean_headers.append('wavelength')
+            elif 'linewidth' in h_lower:
+                clean_headers.append('linewidth')
+            elif 'power' in h_lower and 'stability' in h_lower:
+                clean_headers.append('power_stability')
+            elif 'output' in h_lower and 'power' in h_lower:
+                clean_headers.append('output_power')
+            elif 'beam' in h_lower and ('waist' in h_lower or 'diameter' in h_lower):
+                clean_headers.append('beam_diameter')
+            elif 'beam' in h_lower and 'quality' in h_lower:
+                clean_headers.append('beam_quality')
+            elif 'm²' in h_lower or 'm2' in h_lower:
+                clean_headers.append('beam_quality')
+            elif 'polarization' in h_lower:
+                clean_headers.append('polarization')
+            elif 'digital' in h_lower:
+                clean_headers.append('digital_modulation')
+            elif 'analog' in h_lower:
+                clean_headers.append('analog_modulation')
+            else:
+                clean_headers.append(h.replace(' ', '_').lower())
+        
+        # Skip separator line (line 1)
+        # Process data rows
+        for line in lines[2:]:
+            if not line.strip() or '---' in line:
+                continue
+            
+            # Split preserving empty cells
+            parts = line.split('|')
+            values = []
+            for part in parts:
+                values.append(part.strip())
+            
+            # Remove first and last if empty
+            if values and values[0] == '':
+                values = values[1:]
+            if values and values[-1] == '':
+                values = values[:-1]
+            
+            if len(values) >= 2:
+                model = values[0]
+                # Check for laser model pattern
+                if re.match(r'^L[BCPX]X-\d+', model):
+                    # Match values to headers by position
+                    for i in range(1, min(len(values), len(clean_headers))):
+                        val = values[i]
+                        header = clean_headers[i]
+                        if val and val not in ['', '-', 'N/A'] and header != 'model':
+                            key = f"{model}_{header}"
+                            specs[key] = self._parse_technical_value(val)
+        
+        return specs
+    
     def _extract_from_pdf_text(self, text: str) -> Dict[str, Any]:
         """Extract specs from PDF text using advanced patterns."""
         specs = {}
+        
+        # First try to extract markdown tables
+        if '|' in text and '---|' in text:
+            # Find all markdown tables
+            lines = text.split('\n')
+            table_start = None
+            for i, line in enumerate(lines):
+                if '|' in line:
+                    if table_start is None:
+                        table_start = i
+                elif table_start is not None:
+                    # End of table, process it
+                    table_text = '\n'.join(lines[table_start:i])
+                    if '---|' in table_text:  # Valid markdown table
+                        table_specs = self._parse_markdown_table(table_text)
+                        specs.update(table_specs)
+                    table_start = None
+            
+            # Process last table if exists
+            if table_start is not None:
+                table_text = '\n'.join(lines[table_start:])
+                if '---|' in table_text:
+                    table_specs = self._parse_markdown_table(table_text)
+                    specs.update(table_specs)
+        
         lines = text.split('\n')
         
         # Parse markdown tables
