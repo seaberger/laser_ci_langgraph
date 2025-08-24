@@ -326,14 +326,19 @@ def generate_ai_competitive_report():
     analyzer = AICompetitiveAnalyzer()
     report = analyzer.generate_report()
     
-    # Save report
-    with open("competitive_intelligence_report.md", "w") as f:
+    # Save report to outputs folder
+    from pathlib import Path
+    outputs_dir = Path("outputs")
+    outputs_dir.mkdir(exist_ok=True)
+    report_path = outputs_dir / "competitive_intelligence_report.md"
+    
+    with open(report_path, "w") as f:
         f.write(report)
     
     print("\n" + "=" * 80)
     print("AI Competitive Intelligence Report Generated!")
     print("=" * 80)
-    print(f"Report saved to: competitive_intelligence_report.md")
+    print(f"Report saved to: {report_path}")
     print(f"Report length: {len(report)} characters")
     
     # Show preview

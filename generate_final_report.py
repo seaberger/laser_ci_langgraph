@@ -269,11 +269,16 @@ def generate_comprehensive_report():
 if __name__ == "__main__":
     report = generate_comprehensive_report()
     
-    # Save report
-    with open("competitive_intelligence_report.md", "w") as f:
+    # Save report to outputs folder
+    from pathlib import Path
+    outputs_dir = Path("outputs")
+    outputs_dir.mkdir(exist_ok=True)
+    report_path = outputs_dir / "competitive_intelligence_report.md"
+    
+    with open(report_path, "w") as f:
         f.write(report)
     
-    print("Report generated: competitive_intelligence_report.md")
+    print(f"Report generated: {report_path}")
     print("\n" + "=" * 80)
     print("Report Preview:")
     print("=" * 80)

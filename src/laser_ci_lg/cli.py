@@ -73,10 +73,10 @@ def schedule(
     def job():
         state = GraphState(config_path=config_path, openai_model=model, use_llm=use_llm)
         res = graph.invoke(state)
-        os.makedirs("reports", exist_ok=True)
+        os.makedirs("outputs/reports", exist_ok=True)
         import datetime
 
-        fname = f"reports/{datetime.datetime.utcnow():%Y-%m}-report.md"
+        fname = f"outputs/reports/{datetime.datetime.utcnow():%Y-%m}-report.md"
         with open(fname, "w") as f:
             f.write(res.report_md or "# No report\n")
         print(f"Wrote {fname}")
