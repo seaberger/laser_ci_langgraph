@@ -5,6 +5,7 @@ from .scrapers.coherent import CoherentScraper
 from .scrapers.hubner_cobolt import CoboltScraper
 from .scrapers.omicron_luxx import OmicronLuxxScraper
 from .scrapers.oxxius_lbx import OxxiusLbxScraper
+from .scrapers.lumencor import LumencorScraper
 
 
 def seed_from_config(path="config/competitors.yml"):
@@ -104,8 +105,12 @@ def run_scrapers_from_config(path="config/competitors.yml", force_refresh=False,
             'cobolt': ['hübner', 'hubner', 'cobolt'],
             'omicron': ['omicron'],
             'oxxius': ['oxxius'],
+            'lumencor': ['lumencor'],
             'luxx': ['omicron'],
             'lbx': ['oxxius'],
+            'celesta': ['lumencor'],
+            'spectra': ['lumencor'],
+            'sola': ['lumencor'],
         }
         
         for key, values in mappings.items():
@@ -130,6 +135,8 @@ def run_scrapers_from_config(path="config/competitors.yml", force_refresh=False,
                 scrapers.append(OmicronLuxxScraper(t, force_refresh=force_refresh))
             elif v["name"] == "Oxxius":
                 scrapers.append(OxxiusLbxScraper(t, force_refresh=force_refresh))
+            elif v["name"] == "Lumencor":
+                scrapers.append(LumencorScraper(t, force_refresh=force_refresh))
     
     if not scrapers and scraper_filter:
         print(f"No scrapers matched filter: '{scraper_filter}'")
@@ -138,6 +145,7 @@ def run_scrapers_from_config(path="config/competitors.yml", force_refresh=False,
         print("  - hubner (or cobolt)")
         print("  - omicron (or luxx)")
         print("  - oxxius (or lbx)")
+        print("  - lumencor (or celesta, spectra, sola)")
         return
     
     for sc in scrapers:

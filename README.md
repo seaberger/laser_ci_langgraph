@@ -19,10 +19,15 @@ competitive-intel/
 │   ├── models.py
 │   ├── specs.py
 │   ├── llm.py
+│   ├── extraction.py
 │   ├── scrapers/
+│   │   ├── README.md
 │   │   ├── base.py
 │   │   ├── coherent.py
 │   │   ├── hubner_cobolt.py
+│   │   ├── lumencor.py
+│   │   ├── lumencor_enhanced.py
+│   │   ├── lumencor_browser.py
 │   │   ├── omicron_luxx.py
 │   │   └── oxxius_lbx.py
 │   ├── crawler.py

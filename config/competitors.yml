@@ -48,3 +48,21 @@ vendors:
             product_url: "https://www.oxxius.com/products/lbx-375/"
             datasheets:
               - "https://www.oxxius.com/wp-content/uploads/2022/08/Oxxius-Datasheet-Continuous-and-Modulated-lasers-2022.pdf"
+
+  - name: Lumencor
+    homepage: "https://lumencor.com"
+    segments:
+      - id: light_engines
+        products:
+          - name: "CELESTA Light Engine"
+            product_url: "https://lumencor.com/products/celesta-light-engine"
+            datasheets:
+              - "https://lumencor.com/wp-content/uploads/sites/7/2021/03/CELESTA_datasheet.pdf"
+          - name: "SPECTRA X Light Engine"
+            product_url: "https://lumencor.com/products/spectra-x-light-engine"
+            datasheets:
+              - "https://lumencor.com/wp-content/uploads/sites/7/2023/03/SPECTRA_X_datasheet.pdf"
+          - name: "SOLA Light Engine"
+            product_url: "https://lumencor.com/products/sola-light-engine"
+            datasheets:
+              - "https://lumencor.com/wp-content/uploads/sites/7/2021/03/SOLA_datasheet.pdf"

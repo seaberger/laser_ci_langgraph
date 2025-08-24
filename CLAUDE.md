@@ -124,11 +124,82 @@ Example: `data/pdf_cache/omicron/luxx_plus_datasheet201901.pdf`
 - Model defaults to `gpt-4o-mini`, configurable via CLI or env var
 - Only triggers LLM when heuristic mapping yields insufficient fields
 
+## Scraper Architecture
+
+### Base Scraper Pattern
+All scrapers inherit from `BaseScraper` which provides:
+- `iter_targets()` - Yields product URLs and datasheets from config
+- `fetch_with_cache()` - Fetches with caching, deduplication, and extraction
+- `store_document()` - Handles database storage with duplicate detection
+
+### Minimal Scraper Implementation
+```python
+from .base import BaseScraper
+from ..db import SessionLocal
+
+class VendorNameScraper(BaseScraper):
+    def vendor(self) -> str:
+        return "VendorName"
+    
+    def run(self):
+        s = SessionLocal()
+        try:
+            for tgt in self.iter_targets():
+                status, content_type, text, content_hash, file_path, raw_specs = self.fetch_with_cache(tgt["url"])
+                self.store_document(s, tgt, status, content_type, text, 
+                                  content_hash, file_path, raw_specs)
+            s.commit()
+        finally:
+            s.close()
+```
+
+### Key Methods from BaseScraper
+- **vendor()**: Return vendor display name (required override)
+- **run()**: Main entry point for scraping (required override)
+- **fetch_with_cache(url)**: Returns tuple (status, content_type, text, hash, path, specs)
+  - Automatically caches PDFs to `data/pdf_cache/vendor/`
+  - Calculates content hashes for duplicate detection
+  - Extracts specs using HTML/PDF extraction system
+- **store_document()**: Handles database storage
+  - Skips unchanged documents (same hash)
+  - Updates changed documents
+  - Inserts new documents
+
 ## Adding New Vendors
 
-1. Add vendor config to `config/competitors.yml`
-2. Create scraper in `src/laser_ci_lg/scrapers/{vendor_name}.py` inheriting from `BaseScraper`
-3. Optionally add vendor-specific parsing logic for better k/v extraction
+1. **Add vendor config** to `config/competitors.yml`:
+```yaml
+  - name: VendorName
+    homepage: "https://vendor.com"
+    segments:
+      - id: diode_instrumentation
+        products:
+          - name: "Model XYZ"
+            product_url: "https://vendor.com/xyz"
+            datasheets:
+              - "https://vendor.com/xyz.pdf"
+```
+
+2. **Create scraper** in `src/laser_ci_lg/scrapers/vendorname.py`:
+   - Copy minimal implementation pattern above
+   - Use existing scrapers as reference (omicron_luxx.py is simplest)
+
+3. **Register in crawler** (`src/laser_ci_lg/crawler.py`):
+   - Add import: `from .scrapers.vendorname import VendorNameScraper`
+   - Add to mappings for CLI filter support
+   - Add instantiation in vendor name check
+
+4. **Test the scraper**:
+```bash
+# Run just your scraper
+uv run python -m src.laser_ci_lg.cli run --scraper vendorname
+
+# Clean and re-run if needed
+uv run python -m src.laser_ci_lg.cli clean vendorname
+uv run python -m src.laser_ci_lg.cli run --scraper vendorname
+```
+
+For full scraper development guide, see `src/laser_ci_lg/scrapers/README.md`
 
 ## Canonical Spec Schema
 

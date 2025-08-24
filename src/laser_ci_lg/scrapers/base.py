@@ -9,6 +9,7 @@ import os
 from urllib.parse import urlparse
 import re
 from ..extraction import AdvancedHTMLExtractor, AdvancedPDFExtractor
+from typing import Union
 
 
 class Target(dict): ...
@@ -144,9 +145,193 @@ class BaseScraper(ABC):
             return cache_path.read_bytes()
         return None
     
+    def requires_browser(self, url: str, initial_response: Union[requests.Response, None] = None) -> bool:
+        """
+        Detect if a URL requires browser-based fetching.
+        
+        Indicators that browser is needed:
+        1. PDF URL returns HTML instead of PDF content
+        2. HTML has minimal content but lots of JavaScript
+        3. Response contains SPA framework markers (React, Vue, Angular)
+        4. Content-Type mismatch (PDF URL with HTML response)
+        """
+        # Fetch if not provided
+        if initial_response is None:
+            try:
+                initial_response = requests.get(url, timeout=10, allow_redirects=True)
+            except:
+                return False
+        
+        content = initial_response.content
+        content_type = initial_response.headers.get('content-type', '').lower()
+        
+        # Check 1: PDF URL returning HTML
+        if url.lower().endswith('.pdf'):
+            # If content starts with HTML doctype or tags, it's not a real PDF
+            content_start = content[:500].lower()
+            if b'<!doctype' in content_start or b'<html' in content_start:
+                print(f"  → Detected: PDF URL returning HTML (requires browser)")
+                return True
+            # Check if it's actually a PDF
+            if not content.startswith(b'%PDF'):
+                print(f"  → Detected: PDF URL with non-PDF content (requires browser)")
+                return True
+        
+        # For HTML pages, check for SPA indicators
+        if 'text/html' in content_type:
+            html_text = content.decode('utf-8', errors='ignore')
+            
+            # Check 2: Minimal content with heavy JavaScript
+            # Count actual text content vs script tags
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_text, 'html.parser')
+            
+            # Remove script and style tags
+            for tag in soup(['script', 'style', 'meta', 'link']):
+                tag.decompose()
+            
+            text_content = soup.get_text(strip=True)
+            
+            # If very little text content compared to HTML size
+            if len(text_content) < 500 and len(html_text) > 5000:
+                print(f"  → Detected: Minimal content with heavy JavaScript (requires browser)")
+                return True
+            
+            # Check 3: SPA framework markers
+            spa_markers = [
+                'data-react', 'react-root', '__react',  # React
+                'ng-app', 'ng-controller', 'angular',   # Angular
+                'v-app', 'vue-app', '__vue__',          # Vue
+                'data-n-head', '__NUXT__',              # Nuxt/Vue
+                '__NEXT_DATA__',                        # Next.js
+                'ember-application',                     # Ember
+                'svelte-'                                # Svelte
+            ]
+            
+            html_lower = html_text.lower()
+            for marker in spa_markers:
+                if marker.lower() in html_lower:
+                    print(f"  → Detected: SPA framework marker '{marker}' (requires browser)")
+                    return True
+            
+            # Check for lazy-loaded content indicators
+            if 'lazy-load' in html_lower or 'data-src' in html_lower:
+                print(f"  → Detected: Lazy-loaded content (requires browser)")
+                return True
+        
+        return False
+    
+    def fetch_with_browser(self, url: str) -> Tuple[int, str, str, str, Optional[str], Optional[dict]]:
+        """
+        Fetch content using Playwright browser for JavaScript-heavy sites.
+        Returns: (status_code, content_type, text, content_hash, file_path, raw_specs)
+        """
+        try:
+            from playwright.sync_api import sync_playwright
+            import time
+            
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context()
+                page = context.new_page()
+                
+                try:
+                    print(f"  → Browser fetching: {url}")
+                    response = page.goto(url, wait_until="networkidle", timeout=30000)
+                    
+                    if url.lower().endswith(".pdf"):
+                        # Wait for potential redirect or download
+                        time.sleep(2)
+                        
+                        # Check if we got an actual PDF or HTML
+                        content = page.content()
+                        if '<html' in content.lower():
+                            # Still HTML, might need to trigger download
+                            # Try to find and click download link
+                            download_link = page.locator('a[href*=".pdf"], button:has-text("Download")')
+                            if download_link.count() > 0:
+                                with page.expect_download() as download_info:
+                                    download_link.first.click()
+                                download = download_info.value
+                                
+                                cache_path = self.get_pdf_cache_path(url)
+                                download.save_as(cache_path)
+                                content = cache_path.read_bytes()
+                            else:
+                                # Can't find PDF, return HTML
+                                content = content.encode()
+                        else:
+                            # Got PDF content directly
+                            content = page.content().encode()
+                        
+                        if content.startswith(b'%PDF'):
+                            # It's a real PDF
+                            cache_path = self.get_pdf_cache_path(url)
+                            cache_path.write_bytes(content)
+                            content_hash = self.calculate_content_hash(content)
+                            text, raw_specs = self.extract_pdf_specs_with_docling(content)
+                            return response.status, "pdf_text", text, content_hash, str(cache_path), raw_specs
+                        else:
+                            # Still HTML, process as HTML
+                            content_hash = self.calculate_content_hash(content)
+                            raw_specs = self.extract_all_html_specs(content.decode('utf-8', errors='ignore'))
+                            return response.status, "html", content.decode('utf-8', errors='ignore'), content_hash, None, raw_specs
+                    
+                    else:
+                        # HTML page - wait for content
+                        time.sleep(3)
+                        
+                        # Try to wait for specific content
+                        try:
+                            page.wait_for_selector("table, .specifications, .specs, .datasheet, .product-specs", 
+                                                 timeout=5000, state="visible")
+                        except:
+                            pass  # Content might be there even without these selectors
+                        
+                        html_content = page.content()
+                        content_hash = self.calculate_content_hash(html_content.encode())
+                        raw_specs = self.extract_all_html_specs(html_content)
+                        
+                        return response.status, "html", html_content, content_hash, None, raw_specs
+                        
+                finally:
+                    browser.close()
+                    
+        except ImportError:
+            print(f"  → Playwright not available, falling back to requests")
+            return self._fetch_with_requests(url)
+        except Exception as e:
+            print(f"  → Browser error: {e}, falling back to requests")
+            return self._fetch_with_requests(url)
+    
+    def _fetch_with_requests(self, url: str) -> Tuple[int, str, str, str, Optional[str], Optional[dict]]:
+        """
+        Original fetch method using requests library.
+        """
+        is_pdf = url.lower().endswith(".pdf")
+        
+        # Fetch from network
+        r = requests.get(url, timeout=30)
+        content = r.content
+        content_hash = self.calculate_content_hash(content)
+        
+        # Process content
+        if is_pdf:
+            # Cache the PDF
+            file_path = self.cache_pdf(url, content)
+            
+            # Extract with Docling
+            text, raw_specs = self.extract_pdf_specs_with_docling(content)
+            return r.status_code, "pdf_text", text, content_hash, file_path, raw_specs
+        else:
+            # HTML processing
+            text = r.text
+            raw_specs = self.extract_all_html_specs(text)
+            return r.status_code, "html", text, content_hash, None, raw_specs
+    
     def fetch_with_cache(self, url: str) -> Tuple[int, str, str, str, Optional[str], Optional[dict]]:
         """
-        Enhanced fetch with caching and fingerprinting.
+        Enhanced fetch with caching, fingerprinting, and automatic browser detection.
         Returns: (status_code, content_type, text, content_hash, file_path, raw_specs)
         """
         # Check if we have a cached version
@@ -172,6 +357,11 @@ class BaseScraper(ABC):
         # Fetch from network
         print(f"  → Fetching: {url}")
         r = requests.get(url, timeout=30)
+        
+        # Check if browser is needed
+        if self.requires_browser(url, r):
+            return self.fetch_with_browser(url)
+        
         content = r.content
         content_hash = self.calculate_content_hash(content)
         
