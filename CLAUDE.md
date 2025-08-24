@@ -74,11 +74,49 @@ The system uses a linear LangGraph state machine with these nodes:
 - `segments.yml` - Product categories (diode_instrumentation, light_engines)
 
 ### Database Schema
-SQLite database (`data/laser_ci.db`) stores:
+SQLite database (`data/laser-ci.sqlite`) stores:
 - Manufacturer and product metadata
 - Raw scraped documents with timestamps
 - Normalized spec snapshots for historical tracking
 - Unique constraints prevent duplicate entries
+
+**Tables:**
+- `manufacturers` - Vendor/manufacturer information
+  - `id`: Primary key
+  - `name`: Vendor name (e.g., 'Coherent', 'Omicron', 'Hübner Photonics (Cobolt)')
+  - `homepage`: Company website URL
+
+- `products` - Laser product models
+  - `id`: Primary key
+  - `manufacturer_id`: Foreign key to manufacturers
+  - `segment_id`: Product segment (e.g., 'diode_instrumentation')
+  - `name`: Product model name
+  - `product_url`: Product page URL
+
+- `raw_documents` - Scraped HTML and PDF documents
+  - `id`: Primary key
+  - `product_id`: Foreign key to products
+  - `url`: Document URL
+  - `content_type`: 'html' or 'pdf_text'
+  - `raw_specs`: JSON string containing extracted specifications
+  - `content_hash`: SHA-256 hash for duplicate detection
+  - `file_path`: Local cache path for PDFs
+
+**Accessing Data:**
+```bash
+# Query database directly
+sqlite3 data/laser-ci.sqlite
+
+# Example: Check vendor products
+sqlite3 data/laser-ci.sqlite "SELECT m.name, COUNT(p.id) FROM manufacturers m LEFT JOIN products p ON m.id = p.manufacturer_id GROUP BY m.id"
+
+# Example: Get spec counts
+sqlite3 data/laser-ci.sqlite "SELECT m.name, d.content_type, LENGTH(d.raw_specs) FROM raw_documents d JOIN products p ON d.product_id = p.id JOIN manufacturers m ON p.manufacturer_id = m.id"
+```
+
+**PDF Cache:**
+PDFs are cached locally in `data/pdf_cache/<vendor_name>/`
+Example: `data/pdf_cache/omicron/luxx_plus_datasheet201901.pdf`
 
 ### LLM Integration
 - Uses OpenAI API with structured output (`json_schema` format)
