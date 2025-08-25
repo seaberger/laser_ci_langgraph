@@ -295,18 +295,61 @@ class AdvancedHTMLExtractor:
         return any(keyword in text for keyword in self.spec_keywords)
     
     def _dataframe_to_specs(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Convert a pandas DataFrame to a specs dictionary."""
+        """Convert a pandas DataFrame to a specs dictionary with clean keys."""
         specs = {}
         
-        for index, row in df.iterrows():
-            spec_name = str(index)
+        # Check if this is a product comparison table (multiple products as columns)
+        # vs a single product spec table (spec names in first column)
+        first_col_values = df.iloc[:, 0] if len(df.columns) > 0 else []
+        
+        # If columns look like product names, treat as comparison table
+        if len(df.columns) > 1 and all(isinstance(col, str) for col in df.columns):
+            # Each column is a product, rows are specs
             for col in df.columns:
-                value = row[col]
-                if pd.notna(value):
-                    key = f"{spec_name}_{col}" if col else spec_name
-                    specs[key] = str(value)
+                if col and not col.startswith('Unnamed'):
+                    product_key = str(col).strip()
+                    for index, row in df.iterrows():
+                        spec_name = str(index).strip()
+                        value = row[col]
+                        if pd.notna(value):
+                            # Clean the spec name
+                            clean_spec = self._clean_spec_name(spec_name)
+                            # Create key with product suffix
+                            key = f"{clean_spec}_{product_key}"
+                            specs[key] = str(value)
+        else:
+            # Standard extraction - append column to row
+            for index, row in df.iterrows():
+                spec_name = str(index)
+                for col in df.columns:
+                    value = row[col]
+                    if pd.notna(value):
+                        # Clean the spec name
+                        clean_spec = self._clean_spec_name(spec_name)
+                        # Only append column if it's meaningful
+                        if col and not str(col).startswith('Unnamed'):
+                            key = f"{clean_spec}_{col}"
+                        else:
+                            key = clean_spec
+                        specs[key] = str(value)
         
         return specs
+    
+    def _clean_spec_name(self, spec_name: str) -> str:
+        """Clean a spec name to make it more normalizable."""
+        import re
+        
+        # Remove footnote numbers (e.g., "Wavelength 1" -> "Wavelength")
+        cleaned = re.sub(r'\s+\d+\s*$', '', spec_name)
+        
+        # Remove units in parentheses at the end
+        # "Output Power (mW)" -> "Output Power"
+        cleaned = re.sub(r'\s*\([^)]+\)\s*$', '', cleaned)
+        
+        # Remove extra whitespace
+        cleaned = ' '.join(cleaned.split())
+        
+        return cleaned
 
 
 class AdvancedPDFExtractor:
@@ -610,11 +653,13 @@ class AdvancedPDFExtractor:
                 if in_table and len(cells) >= 2:
                     spec_name = cells[0]
                     if spec_name and not spec_name.lower() in ['specifications', 'parameter', '']:
+                        # Clean the spec name
+                        clean_spec = self._clean_spec_name(spec_name)
                         if len(table_headers) > 1 and len(cells) == len(table_headers):
                             # Map to headers
                             for j in range(1, len(cells)):
                                 if j < len(table_headers):
-                                    key = f"{spec_name}_{table_headers[j]}"
+                                    key = f"{clean_spec}_{table_headers[j]}"
                                     value = cells[j]
                                     if value and value not in ['-', 'N/A', '']:
                                         specs[key] = self._parse_technical_value(value)
@@ -624,9 +669,9 @@ class AdvancedPDFExtractor:
                             values = [v for v in values if v and v not in ['-', 'N/A', '']]
                             if values:
                                 if len(values) == 1:
-                                    specs[spec_name] = self._parse_technical_value(values[0])
+                                    specs[clean_spec] = self._parse_technical_value(values[0])
                                 else:
-                                    specs[spec_name] = [self._parse_technical_value(v) for v in values]
+                                    specs[clean_spec] = [self._parse_technical_value(v) for v in values]
             
             # Look for spec patterns with colons (but don't split ratios)
             elif ':' in line:
@@ -718,15 +763,54 @@ class AdvancedPDFExtractor:
         return value.strip()
     
     def _dataframe_to_specs(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Convert DataFrame to specs dictionary."""
+        """Convert DataFrame to specs dictionary with clean keys."""
         specs = {}
         
-        for index, row in df.iterrows():
-            spec_name = str(index)
+        # Check if this is a product comparison table
+        if len(df.columns) > 1 and all(isinstance(col, str) for col in df.columns):
+            # Each column is a product, rows are specs
             for col in df.columns:
-                value = row[col]
-                if pd.notna(value):
-                    key = f"{spec_name}_{col}" if str(col) else spec_name
-                    specs[key] = self._parse_technical_value(str(value))
+                if col and not col.startswith('Unnamed'):
+                    product_key = str(col).strip()
+                    for index, row in df.iterrows():
+                        spec_name = str(index).strip()
+                        value = row[col]
+                        if pd.notna(value):
+                            # Clean the spec name
+                            clean_spec = self._clean_spec_name(spec_name)
+                            # Create key with product suffix
+                            key = f"{clean_spec}_{product_key}"
+                            specs[key] = self._parse_technical_value(str(value))
+        else:
+            # Standard extraction
+            for index, row in df.iterrows():
+                spec_name = str(index)
+                for col in df.columns:
+                    value = row[col]
+                    if pd.notna(value):
+                        # Clean the spec name
+                        clean_spec = self._clean_spec_name(spec_name)
+                        # Only append column if it's meaningful
+                        if col and not str(col).startswith('Unnamed'):
+                            key = f"{clean_spec}_{col}"
+                        else:
+                            key = clean_spec
+                        specs[key] = self._parse_technical_value(str(value))
         
         return specs
+    
+    def _clean_spec_name(self, spec_name: str) -> str:
+        """Clean a spec name to make it more normalizable."""
+        import re
+        
+        # Remove footnote numbers (e.g., "Wavelength 1" -> "Wavelength")
+        # Handle both "Name 1" and "Name 1  (unit)" patterns
+        cleaned = re.sub(r'\s+\d+\s*', ' ', spec_name)
+        
+        # Remove units in parentheses
+        cleaned = re.sub(r'\s*\([^)]+\)', '', cleaned)
+        
+        # Remove extra whitespace
+        cleaned = ' '.join(cleaned.split())
+        
+        return cleaned
