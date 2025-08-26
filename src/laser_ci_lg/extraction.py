@@ -339,12 +339,13 @@ class AdvancedHTMLExtractor:
         """Clean a spec name to make it more normalizable."""
         import re
         
-        # Remove footnote numbers (e.g., "Wavelength 1" -> "Wavelength")
-        cleaned = re.sub(r'\s+\d+\s*$', '', spec_name)
+        # Remove footnote numbers anywhere in the string
+        # "Wavelength 1 2" -> "Wavelength"
+        cleaned = re.sub(r'\s+\d+\s*', ' ', spec_name)
         
-        # Remove units in parentheses at the end
+        # Remove units in parentheses
         # "Output Power (mW)" -> "Output Power"
-        cleaned = re.sub(r'\s*\([^)]+\)\s*$', '', cleaned)
+        cleaned = re.sub(r'\s*\([^)]+\)', '', cleaned)
         
         # Remove extra whitespace
         cleaned = ' '.join(cleaned.split())
@@ -361,7 +362,8 @@ class AdvancedPDFExtractor:
             do_table_structure=True,
             do_ocr=False,  # OCR not needed for digital PDFs
         )
-        self.pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
+        # Use FAST mode for quicker processing (change to ACCURATE for production)
+        self.pipeline_options.table_structure_options.mode = TableFormerMode.FAST
         
         self.converter = DocumentConverter(
             format_options={
@@ -370,6 +372,23 @@ class AdvancedPDFExtractor:
                 )
             }
         )
+    
+    def _clean_spec_name(self, spec_name: str) -> str:
+        """Clean a spec name to make it more normalizable."""
+        import re
+        
+        # Remove footnote numbers anywhere in the string
+        # "Wavelength 1 2" -> "Wavelength"
+        cleaned = re.sub(r'\s+\d+\s*', ' ', spec_name)
+        
+        # Remove units in parentheses
+        # "Output Power (mW)" -> "Output Power"
+        cleaned = re.sub(r'\s*\([^)]+\)', '', cleaned)
+        
+        # Remove extra whitespace
+        cleaned = ' '.join(cleaned.split())
+        
+        return cleaned
     
     def extract_specs(self, pdf_content: bytes) -> Tuple[str, Dict[str, Any]]:
         """Extract text and structured specs from PDF."""

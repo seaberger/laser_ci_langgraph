@@ -60,6 +60,10 @@ def parse_value_to_unit(key: str, value: str) -> Any:
 
     def to_float(x: str):
         try:
+            # Handle comparison operators
+            x = re.sub(r'^[<>≤≥]\s*', '', x)
+            # Remove commas from numbers
+            x = x.replace(',', '')
             return float(x)
         except:
             return None

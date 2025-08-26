@@ -1,5 +1,6 @@
 import re
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy import select
 from .db import SessionLocal
 from .models import RawDocument, NormalizedSpec, Product
@@ -52,7 +53,7 @@ def extract_models_from_specs(raw_specs: dict) -> dict:
     return dict(models)
 
 
-def normalize_all(use_llm: bool = True, model: str | None = None) -> int:
+def normalize_all(use_llm: bool = True, model: str | None = None, max_workers: int = 5) -> int:
     """
     Return count of inserted NormalizedSpec rows.
     Creates individual records for each laser model found in specs.
@@ -124,8 +125,9 @@ def normalize_all(use_llm: bool = True, model: str | None = None) -> int:
                 # Count non-null fields
                 mapped_count = sum(1 for v in canonical.values() if v is not None and v != {})
                 
-                # Use LLM if needed
-                if use_llm and mapped_count < 4:
+                # Always use LLM for better consistency
+                # Only skip if we already have good heuristic results (>10 fields mapped)
+                if use_llm and mapped_count < 10:
                     try:
                         context = f"Laser model: {model_name}\nProduct family: {product.name}"
                         llm_result = llm_normalize(model_specs, context, model=model)
@@ -134,10 +136,24 @@ def normalize_all(use_llm: bool = True, model: str | None = None) -> int:
                         for k in CANONICAL_SPEC_KEYS:
                             if k in llm_result and llm_result[k] is not None:
                                 # Handle different formats from LLM
-                                if isinstance(llm_result[k], dict) and 'value' in llm_result[k]:
-                                    canonical[k] = llm_result[k]['value']
+                                value = llm_result[k]
+                                if isinstance(value, dict):
+                                    # Extract from dict format
+                                    if 'value' in value:
+                                        canonical[k] = float(value['value']) if isinstance(value['value'], (int, float)) else value['value']
+                                    elif 'typical' in value:
+                                        canonical[k] = float(value['typical']) if isinstance(value['typical'], (int, float)) else value['typical']
+                                    elif 'nominal' in value:
+                                        canonical[k] = float(value['nominal']) if isinstance(value['nominal'], (int, float)) else value['nominal']
+                                elif k in ['polarization', 'interfaces', 'dimensions_mm', 'vendor_fields']:
+                                    # Keep as-is for non-numeric fields
+                                    canonical[k] = value
                                 else:
-                                    canonical[k] = llm_result[k]
+                                    # Convert to float for numeric fields
+                                    try:
+                                        canonical[k] = float(value) if value is not None else None
+                                    except (ValueError, TypeError):
+                                        canonical[k] = value
                         
                         # Update vendor fields
                         if 'vendor_fields' in llm_result:

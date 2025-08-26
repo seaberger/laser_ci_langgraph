@@ -1,0 +1,238 @@
+# Target laser products for competitive intelligence
+# Based on market analysis and competitive landscape
+
+vendors:
+  - name: Coherent
+    homepage: "https://www.coherent.com"
+    discovery_mode: "smart"
+    max_products: 100  # Coherent has many products
+    segments:
+      - id: diode_instrumentation
+        # Key CW laser families to track
+        product_patterns:
+          # OBIS family - main competitor products
+          - "OBIS"
+          - "OBIS LX"
+          - "OBIS LS"
+          - "OBIS Core"
+          - "OBIS LG"
+          - "OBIS XT"
+          - "OBIS Smart"
+          
+          # Other key product lines
+          - "Genesis"
+          - "Genesis MX"
+          - "Sapphire"
+          - "Sapphire LP"
+          - "Verdi"
+          - "Verdi G"
+          - "Compass"
+          - "Azure"
+          
+        include_categories:
+          - "cw laser"
+          - "cw solid state"
+          - "diode laser"
+          - "single frequency"
+          - "dpss"
+          
+        exclude_categories:
+          - "ultrafast"
+          - "femtosecond"
+          - "picosecond"
+          - "excimer"
+          - "co2"
+          - "fiber laser"
+          
+      - id: light_engines
+        product_patterns:
+          - "OBIS CellX"
+          - "OBIS Galaxy"
+          - "LaserBox"
+          - "HIVE"
+          
+        include_categories:
+          - "laser engine"
+          - "light engine"
+          - "beam combiner"
+          - "microscopy"
+
+  - name: Hübner Photonics (Cobolt)
+    homepage: "https://hubner-photonics.com"
+    discovery_mode: "smart"
+    max_products: 50
+    segments:
+      - id: diode_instrumentation
+        product_patterns:
+          # Cobolt series - single frequency lasers
+          - "Cobolt 04-01"  # Compact series
+          - "Cobolt 05-01"  # High performance series
+          - "Cobolt 06-01"  # MLD series
+          - "Cobolt 08-01"  # High power series
+          
+          # Individual model names
+          - "Blues"
+          - "Jive"
+          - "Samba"
+          - "Rumba"
+          - "Mambo"
+          - "Calypso"
+          - "Fandango"
+          - "Twist"
+          - "Skyra"
+          - "Zouk"
+          
+        include_categories:
+          - "single frequency"
+          - "diode laser"
+          - "dpss"
+          - "narrow linewidth"
+          
+        exclude_categories:
+          - "tunable"
+          - "pulsed"
+
+  - name: Omicron
+    homepage: "https://www.omicron-laser.de"
+    discovery_mode: "smart"
+    max_products: 40
+    segments:
+      - id: diode_instrumentation
+        product_patterns:
+          # LuxX family - main product line
+          - "LuxX"
+          - "LuxX+"
+          - "LuxX 375"
+          - "LuxX 405"
+          - "LuxX 445"
+          - "LuxX 473"
+          - "LuxX 488"
+          - "LuxX 515"
+          - "LuxX 520"
+          - "LuxX 561"
+          - "LuxX 638"
+          - "LuxX 640"
+          - "LuxX 660"
+          - "LuxX 685"
+          - "LuxX 785"
+          
+          # Other families
+          - "BrixX"
+          - "PhoxX"
+          - "QuixX"
+          
+        include_categories:
+          - "diode laser"
+          - "dpss"
+          - "compact laser"
+          
+        exclude_categories:
+          - "pulsed"
+          - "picosecond"
+
+  - name: Oxxius
+    homepage: "https://www.oxxius.com"
+    discovery_mode: "smart"
+    max_products: 60
+    segments:
+      - id: diode_instrumentation
+        product_patterns:
+          # LaserBoxx families
+          - "LBX"        # Standard LaserBoxx
+          - "LBX-375"
+          - "LBX-405"
+          - "LBX-445"
+          - "LBX-473"
+          - "LBX-488"
+          - "LBX-515"
+          - "LBX-520"
+          - "LBX-532"
+          - "LBX-561"
+          - "LBX-638"
+          - "LBX-640"
+          - "LBX-660"
+          - "LBX-785"
+          
+          - "LCX"        # LaserBoxx combinable
+          - "LCX-375"
+          - "LCX-405"
+          - "LCX-445"
+          - "LCX-473"
+          - "LCX-488"
+          - "LCX-532"
+          - "LCX-561"
+          - "LCX-638"
+          
+          - "LPX"        # LaserBoxx pulsed
+          - "LPX-405"
+          - "LPX-450"
+          - "LPX-488"
+          
+          # Ultra-low noise series
+          - "SLIM"
+          
+        include_categories:
+          - "laser"
+          - "diode"
+          - "dpss"
+          - "low noise"
+          
+        exclude_categories:
+          - "accessories"
+          - "optics"
+          - "power meter"
+
+  - name: Lumencor
+    homepage: "https://lumencor.com"
+    discovery_mode: "smart"
+    max_products: 30
+    requires_browser: true  # JavaScript-heavy site
+    segments:
+      - id: light_engines
+        product_patterns:
+          # Main light engine families
+          - "CELESTA"
+          - "CELESTA light engine"
+          
+          - "ZIVA"
+          - "ZIVA light engine"
+          
+          - "SPECTRA"
+          - "SPECTRA III"
+          - "SPECTRA X"
+          - "SPECTRA light engine"
+          
+          - "SOLA"
+          - "SOLA SE"
+          - "SOLA SM"
+          - "SOLA light engine"
+          
+          - "AURA"
+          - "AURA light engine"
+          
+          - "RETRA"
+          - "RETRA light engine"
+          
+          - "LIDA"
+          - "LIDA light engine"
+          
+          - "PEKA"
+          
+        include_categories:
+          - "light engine"
+          - "illumination"
+          - "microscopy"
+          - "fluorescence"
+          
+        exclude_categories:
+          - "filter"
+          - "adapter"
+          - "liquid light guide"
+
+# Additional vendors to consider adding:
+# - Thorlabs (specific laser modules only)
+# - Toptica (high-end diode lasers)
+# - CNI Laser (Chinese competitor)
+# - Laserglow (specific models)
+# - Roithner LaserTechnik (European)
+# - Frankfurt Laser Company (European distributor/manufacturer)

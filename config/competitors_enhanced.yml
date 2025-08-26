@@ -1,0 +1,122 @@
+# Enhanced competitor configuration with search terms and product focus
+# For large vendors, specify only the products you want to track
+
+vendors:
+  - name: Coherent
+    homepage: "https://www.coherent.com"
+    # For Coherent, we focus on specific product families
+    # rather than trying to scrape all hundreds of products
+    segments:
+      - id: diode_instrumentation
+        products:
+          # OBIS family - popular CW lasers
+          - name: "OBIS LX/LS"
+            search_terms: ["OBIS LX", "OBIS LS", "OBIS laser"]
+            product_url: "https://www.coherent.com/lasers/cw-solid-state/obis-ls-lx"
+            datasheets:
+              - "https://www.coherent.com/resources/datasheet/lasers/obis-family-ds.pdf"
+          
+          # OBIS Smart family
+          - name: "OBIS Smart"
+            search_terms: ["OBIS Smart", "Smart laser"]
+            # URL will be discovered dynamically
+          
+          # Genesis lasers
+          - name: "Genesis"
+            search_terms: ["Genesis laser", "Genesis CW"]
+            
+          # Sapphire lasers  
+          - name: "Sapphire"
+            search_terms: ["Sapphire laser", "Sapphire OPSL"]
+            
+      - id: light_engines
+        products:
+          - name: "OBIS CellX"
+            search_terms: ["OBIS CellX", "CellX laser engine"]
+            product_url: "https://www.coherent.com/lasers/laser-engine/cellx"
+            
+          - name: "OBIS Galaxy"
+            search_terms: ["OBIS Galaxy", "Galaxy laser engine"]
+            product_url: "https://www.coherent.com/lasers/laser-engine/galaxy"
+
+  - name: Hübner Photonics (Cobolt)
+    homepage: "https://hubner-photonics.com"
+    segments:
+      - id: diode_instrumentation
+        products:
+          - name: "Cobolt 06-01 Series"
+            search_terms: ["Cobolt 06-01", "06-01 Series", "single frequency laser"]
+            product_url: "https://hubner-photonics.com/products/lasers/diode-lasers/06-01-series/"
+            
+          - name: "Cobolt 05-01 Series"
+            search_terms: ["Cobolt 05-01", "05-01 Series", "compact laser"]
+            
+          - name: "Cobolt 08-01 Series"
+            search_terms: ["Cobolt 08-01", "08-01 Series", "high power laser"]
+
+  - name: Omicron
+    homepage: "https://www.omicron-laser.de"
+    segments:
+      - id: diode_instrumentation
+        products:
+          - name: "LuxX / LuxX+"
+            search_terms: ["LuxX laser", "LuxX plus", "LuxX+"]
+            product_url: "https://www.omicron-laser.de/english/lasers/diode-lasers/luxx-lasers.html"
+            
+          - name: "BrixX"
+            search_terms: ["BrixX laser", "BrixX series"]
+            
+          - name: "PhoxX"
+            search_terms: ["PhoxX laser", "PhoxX series"]
+
+  - name: Oxxius
+    homepage: "https://www.oxxius.com"
+    segments:
+      - id: diode_instrumentation
+        products:
+          - name: "LBX LaserBoxx"
+            search_terms: ["LaserBoxx", "LBX", "LBX laser"]
+            # Multiple product pages for different wavelengths
+            # Will be discovered dynamically
+            
+          - name: "LCX LaserBoxx"
+            search_terms: ["LCX", "LaserBoxx LCX", "combinable laser"]
+            
+          - name: "LPX LaserBoxx"  
+            search_terms: ["LPX", "LaserBoxx LPX", "pulsed laser"]
+
+  - name: Lumencor
+    homepage: "https://lumencor.com"
+    segments:
+      - id: light_engines
+        products:
+          - name: "CELESTA Light Engine"
+            search_terms: ["CELESTA", "CELESTA light engine", "laser light engine"]
+            
+          - name: "ZIVA Light Engine"
+            search_terms: ["ZIVA", "ZIVA light engine"]
+            
+          - name: "SPECTRA X Light Engine"
+            search_terms: ["SPECTRA X", "SPECTRA-X", "LED light engine"]
+            
+          - name: "SOLA Light Engine"
+            search_terms: ["SOLA", "SOLA light engine", "white light"]
+            
+          - name: "AURA Light Engine"
+            search_terms: ["AURA", "AURA light engine"]
+
+# For very large vendors like Thorlabs or Newport, you might want to
+# be even more selective and only track specific product lines:
+
+  # - name: Thorlabs
+  #   homepage: "https://www.thorlabs.com"
+  #   segments:
+  #     - id: diode_instrumentation
+  #       products:
+  #         # Only track their CPS series compact lasers
+  #         - name: "CPS Series"
+  #           search_terms: ["CPS laser", "compact laser source"]
+  #           
+  #         # And their DBR lasers
+  #         - name: "DBR Series"
+  #           search_terms: ["DBR laser", "distributed bragg reflector"]

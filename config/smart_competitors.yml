@@ -1,0 +1,132 @@
+# Smart competitor configuration with dynamic discovery support
+# Supports both static URLs and smart discovery patterns
+
+vendors:
+  - name: Coherent
+    homepage: "https://www.coherent.com"
+    discovery_mode: "smart"  # "smart" or "static"
+    max_products: 50  # Limit for large vendors
+    segments:
+      - id: diode_instrumentation
+        # Product patterns to search for (used in smart mode)
+        product_patterns:
+          - "OBIS"
+          - "Genesis"
+          - "Sapphire"
+          - "Verdi"
+          - "Compass"
+        # Categories to include in discovery
+        include_categories:
+          - "cw laser"
+          - "cw solid state"
+          - "diode laser"
+          - "single frequency"
+        # Categories to exclude
+        exclude_categories:
+          - "ultrafast"
+          - "femtosecond"
+          - "picosecond"
+          - "excimer"
+          - "co2"
+        # Static fallback URLs (used if smart discovery fails or in static mode)
+        static_products:
+          - name: "OBIS LX/LS"
+            product_url: "https://www.coherent.com/lasers/cw-solid-state/obis-ls-lx"
+            datasheets:
+              - "https://www.coherent.com/resources/datasheet/lasers/obis-family-ds.pdf"
+      - id: light_engines
+        product_patterns:
+          - "CellX"
+          - "Galaxy"
+          - "LaserBox"
+        include_categories:
+          - "laser engine"
+          - "light engine"
+          - "beam combiner"
+        static_products:
+          - name: "OBIS CellX"
+            product_url: "https://www.coherent.com/lasers/laser-engine/cellx"
+          - name: "OBIS Galaxy"
+            product_url: "https://www.coherent.com/lasers/laser-engine/galaxy"
+
+  - name: Hübner Photonics (Cobolt)
+    homepage: "https://hubner-photonics.com"
+    discovery_mode: "smart"
+    max_products: 30
+    segments:
+      - id: diode_instrumentation
+        product_patterns:
+          - "Cobolt"
+          - "06-01"
+          - "05-01"
+          - "08-01"
+          - "Skyra"
+          - "Rumba"
+        include_categories:
+          - "diode laser"
+          - "single frequency"
+          - "dpss"
+        static_products:
+          - name: "Cobolt 06-01 Series"
+            product_url: "https://hubner-photonics.com/products/lasers/diode-lasers/06-01-series/"
+
+  - name: Omicron
+    homepage: "https://www.omicron-laser.de"
+    discovery_mode: "static"  # Use static as their site structure is simpler
+    segments:
+      - id: diode_instrumentation
+        product_patterns:
+          - "LuxX"
+          - "BrixX"
+          - "PhoxX"
+        static_products:
+          - name: "LuxX / LuxX+"
+            product_url: "https://www.omicron-laser.de/english/lasers/diode-lasers/luxx-lasers.html"
+            datasheets:
+              - "https://www.omicron-laser.de/files/luxx_plus_datasheet201901.pdf"
+
+  - name: Oxxius
+    homepage: "https://www.oxxius.com"
+    discovery_mode: "smart"
+    max_products: 40
+    segments:
+      - id: diode_instrumentation
+        product_patterns:
+          - "LaserBoxx"
+          - "LBX"
+          - "LCX"
+          - "LPX"
+        include_categories:
+          - "laser"
+          - "diode"
+          - "dpss"
+        exclude_categories:
+          - "accessories"
+          - "optics"
+        static_products:
+          - name: "LBX LaserBoxx"
+            datasheets:
+              - "https://www.oxxius.com/wp-content/uploads/2022/08/Oxxius-Datasheet-Continuous-and-Modulated-lasers-2022.pdf"
+
+  - name: Lumencor
+    homepage: "https://lumencor.com"
+    discovery_mode: "smart"
+    max_products: 20
+    requires_browser: true  # Site is JavaScript-heavy
+    segments:
+      - id: light_engines
+        product_patterns:
+          - "CELESTA"
+          - "ZIVA"
+          - "SOLA"
+          - "AURA"
+          - "SPECTRA"
+          - "MAGMA"
+          - "RETRA"
+        include_categories:
+          - "light engine"
+          - "illumination"
+          - "microscopy"
+        static_products:
+          - name: "CELESTA Light Engine"
+            product_url: "https://lumencor.com/products/celesta-light-engine"

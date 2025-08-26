@@ -49,9 +49,32 @@ SCHEMA = {
 }
 
 SYSTEM = (
-    "You convert raw vendor laser specs into a *canonical JSON* schema for CW diode/instrumentation lasers. "
-    "Return ONLY JSON. Extract numbers and units (nm, mW, %, MHz/mrad/mm). Prefer nominal values when ranges are given. "
-    "Populate vendor_fields with additional items you can't map."
+    "You convert raw vendor laser specs into a canonical JSON schema for CW diode/instrumentation lasers. "
+    "Return ONLY JSON with these exact fields:\n"
+    "- wavelength_nm: number (e.g., 488 for '488 nm')\n"
+    "- output_power_mw_nominal: number (e.g., 100 for '100 mW', 50000 for '50 W')\n"
+    "- output_power_mw_min: number (minimum guaranteed power)\n"
+    "- rms_noise_pct: number (e.g., 0.25 for '<0.25%')\n"
+    "- power_stability_pct: number (e.g., 1 for '±1%')\n"
+    "- linewidth_mhz: number (convert from nm/pm if needed)\n"
+    "- linewidth_nm: number (convert from MHz/GHz if needed)\n"
+    "- m2: number (e.g., 1.3 for 'M²<1.3')\n"
+    "- beam_diameter_mm: number (e.g., 0.7 for '0.7 mm')\n"
+    "- beam_divergence_mrad: number\n"
+    "- polarization: string (e.g., 'Linear', 'Circular')\n"
+    "- modulation_analog_hz: number (e.g., 350000 for '350 kHz')\n"
+    "- modulation_digital_hz: number (e.g., 1000000 for '1 MHz')\n"
+    "- ttl_shutter: boolean\n"
+    "- fiber_output: boolean\n"
+    "- fiber_na: number\n"
+    "- fiber_mfd_um: number\n"
+    "- warmup_time_min: number\n"
+    "- interfaces: array of strings (e.g., ['USB', 'RS-232'])\n"
+    "- dimensions_mm: object with x, y, z numeric fields\n"
+    "- vendor_fields: object with any specs you can't map\n\n"
+    "IMPORTANT: Return direct numeric values, NOT nested objects. "
+    "For '<X' or '≤X' use X. For ranges use typical/middle value. "
+    "Convert all units appropriately (W to mW, kHz to Hz, etc.)."
 )
 
 
