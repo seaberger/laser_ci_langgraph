@@ -2,433 +2,387 @@
 
 ## Introduction
 
-The normalization system in Laser CI transforms heterogeneous vendor specifications into a standardized canonical schema. This document explains how `normalize.py` works and how it fits into the complete data pipeline.
+The normalization system in Laser CI transforms heterogeneous vendor specifications into a standardized canonical schema. This document explains the enhanced normalization pipeline with individual model extraction, batch processing, and improved LLM integration.
 
 ## Complete Pipeline Flow
 
 ```
-1. SCRAPE → 2. PARSE → 3. DATABASE → 4. NORMALIZE → 5. REPORT
+1. DISCOVER → 2. EXTRACT → 3. NORMALIZE → 4. ANALYZE → 5. REPORT
 ```
 
-### 1. SCRAPE (scrapers/*.py)
-- Fetch HTML pages and PDF datasheets from vendor websites
-- Handle caching and duplicate detection via content hashing
-- Support for dynamic content via Playwright browser automation
+### 1. DISCOVER (scrapers/ddgs_production.py)
+- **Search-based discovery** using DuckDuckGo API
+- Find product pages with queries like `site:coherent.com "OBIS" laser`
+- Identify PDF datasheets automatically
+- Efficient product discovery via search API
 
-### 2. PARSE (extraction.py)
-- Extract key-value pairs from HTML tables and PDF documents
-- Handle vendor-specific quirks (concatenated tables, column misalignment)
-- Store raw specifications as JSON in database
+### 2. EXTRACT (extraction.py)
+- Parse HTML tables with Pandas
+- Extract PDF specs with Docling (ACCURATE mode)
+- **Clean spec names** removing footnotes and units
+- Handle vendor-specific edge cases
 
-### 3. DATABASE (models.py, db.py)
-- Store raw documents with extracted specs
-- Track content changes via SHA-256 hashing
-- Maintain relationships: Manufacturer → Product → RawDocument
+### 3. NORMALIZE (normalize_batch.py)
+- **Extract individual models** from product families
+- Map vendor fields to canonical schema
+- **Parallel LLM processing** for efficiency
+- Improved field coverage with heuristics + LLM fallback
 
-### 4. NORMALIZE (normalize.py)
-- Convert vendor-specific field names to canonical schema
-- Parse values with units to numeric representations
-- Use LLM fallback when heuristics fail
-- **Runs automatically** after crawl phase completes
-- No manual intervention required
+### 4. ANALYZE (benchmark.py)
+- Group products by wavelength/power class
+- Compare specifications across vendors
+- Identify competitive advantages
 
-### 5. REPORT (reporter.py, enhanced_reporter.py)
-- Generate competitive intelligence reports
-- Compare normalized specs across vendors
-- Identify market positioning and technical advantages
+### 5. REPORT (reporter.py)
+- Generate markdown reports
+- Create comparison matrices
+- Provide strategic insights
 
-## When Normalization Occurs
+## Enhanced Model Extraction
 
-The normalize function is **automatically executed** as part of the LangGraph pipeline workflow and does NOT need to be manually started.
+### Problem: Product Families vs Individual Models
 
-### Automatic Pipeline Integration
-
-The normalization step is wired into the LangGraph state machine (graph.py):
-
+Previously, the system treated entire product families as single items:
 ```python
-# Linear workflow definition
-workflow.add_edge("crawl", "normalize")      # Runs after crawl
-workflow.add_edge("normalize", "report")     # Runs before report
-```
-
-### Execution Triggers
-
-1. **Every `cli run` command** - Normalization always executes as part of the pipeline
-2. **After all scrapers complete** - Waits for crawl phase to finish
-3. **Before report generation** - Must complete for reports to have data
-4. **Incremental processing** - Only processes new/changed documents
-
-### Example Pipeline Execution
-
-```bash
-$ uv run python -m src.laser_ci_lg.cli run
-
-→ Starting bootstrap...
-  ✓ Database initialized
-  
-→ Starting crawl...
-  ✓ Fetched 35 documents
-  
-→ Starting normalize...  # AUTOMATIC - no user action needed
-  ✓ Processed 35 products
-  ✓ Heuristics mapped 28 products
-  ✓ LLM enhanced 7 products
-  
-→ Starting report...
-  ✓ Report generated
-```
-
-## How normalize.py Works
-
-### Core Functions
-
-#### 1. `normalize_all(use_llm=True, model=None)`
-Main entry point that processes all raw documents and creates normalized specifications.
-
-```python
-def normalize_all(use_llm: bool = True, model: str | None = None) -> int:
-    """Return count of inserted NormalizedSpec rows."""
-```
-
-**Process:**
-1. Fetch all raw documents from database
-2. Group documents by product_id
-3. Merge raw specs from multiple documents per product
-4. Apply normalization logic
-5. Store results in NormalizedSpec table
-
-#### 2. `simple_kv_from_text(text: str)`
-Fallback extraction for documents without structured specs.
-
-```python
-def simple_kv_from_text(text: str) -> dict:
-    kv = {}
-    for line in text.splitlines():
-        if ":" in line and len(line) < 120:
-            k, v = line.split(":", 1)
-            kv[k.strip()] = v.strip()
-    return kv
-```
-
-### Normalization Process
-
-The normalization happens in three stages:
-
-#### Stage 1: Merge Raw Specs
-```python
-for pid, docs in by_pid.items():
-    merged_raw, blobs = {}, []
-    for d in docs:
-        if d.raw_specs:
-            merged_raw.update(d.raw_specs)
-        blobs.append(d.text)
-```
-
-#### Stage 2: Heuristic Mapping
-```python
-canonical = {k: None for k in CANONICAL_SPEC_KEYS}
-extras = {}
-for k, v in merged_raw.items():
-    ck = canonical_key(k)  # Maps vendor field to canonical
-    if ck:
-        canonical[ck] = parse_value_to_unit(ck, str(v))
-    else:
-        extras[k] = v  # Store unmapped fields
-canonical["vendor_fields"] = extras or None
-```
-
-#### Stage 3: LLM Fallback
-```python
-if use_llm and sum(v is not None for v in canonical.values()) < 4:
-    llm = llm_normalize(merged_raw, "\n".join(blobs[:2]), model=model)
-    for k in CANONICAL_SPEC_KEYS:
-        if llm.get(k) is not None:
-            canonical[k] = llm.get(k)
-```
-
-## Examples
-
-### Example 1: Coherent OBIS Laser
-
-**Raw specs from extraction:**
-```json
+# Old approach - one entry for all OBIS models
 {
-  "Wavelength": "488 nm",
-  "Output Power": "60 mW",
-  "RMS Noise": "< 0.2 %",
-  "Power Stability": "< ±0.5 %",
-  "Beam Diameter": "0.7 ± 0.05 mm",
-  "M²": "< 1.2",
-  "TTL Modulation": "Yes",
-  "Analog Modulation": "0-10V"
+    "name": "OBIS LX/LS Family",
+    "wavelength_nm": "various",  # Not useful!
+    "power": "various"
 }
 ```
 
-**After heuristic normalization:**
-```python
-{
-  "wavelength_nm": 488.0,
-  "output_power_mw_nominal": 60.0,
-  "rms_noise_pct": 0.2,
-  "power_stability_pct": 0.5,
-  "beam_diameter_mm": 0.7,
-  "m2": 1.2,
-  "ttl_shutter": True,
-  "analog_modulation": "0-10V",
-  "vendor_fields": {}
-}
-```
+### Solution: Individual SKU Extraction
 
-### Example 2: Omicron LuxX+ Laser
-
-**Raw specs (concatenated table issue):**
-```json
-{
-  "Product Table": "LuxX+ 488 488 nm / 100 mW LuxX+ 515 515 nm / 50 mW..."
-}
-```
-
-**After extraction fix and normalization:**
-```python
-{
-  "wavelength_nm": 488.0,
-  "output_power_mw_nominal": 100.0,
-  "vendor_fields": {
-    "Product Model": "LuxX+ 488"
-  }
-}
-```
-
-### Example 3: Oxxius Laser (PDF with column misalignment)
-
-**Raw specs (misaligned):**
-```json
-{
-  "Wavelength": "375",
-  "Output Power": "nm",
-  "Linewidth": "50 mW"
-}
-```
-
-**After PDF fix and normalization:**
-```python
-{
-  "wavelength_nm": 375.0,
-  "output_power_mw_nominal": 50.0,
-  "vendor_fields": {}
-}
-```
-
-### Example 4: LLM Fallback
-
-**When heuristics yield < 4 fields:**
-
-**Raw specs:**
-```json
-{
-  "λ": "532nm",
-  "P_out": "200mW",
-  "Noise (rms)": "0.1%"
-}
-```
-
-**Heuristic result (only 1 field mapped):**
-```python
-{
-  "wavelength_nm": None,  # "λ" not recognized
-  "output_power_mw_nominal": None,  # "P_out" not recognized
-  "rms_noise_pct": 0.1,  # Recognized pattern
-  ...
-}
-```
-
-**LLM input:**
-```json
-{
-  "raw_specs": {"λ": "532nm", "P_out": "200mW", "Noise (rms)": "0.1%"},
-  "text_blob": "Product datasheet text..."
-}
-```
-
-**LLM output (structured JSON):**
-```python
-{
-  "wavelength_nm": 532.0,
-  "output_power_mw_nominal": 200.0,
-  "rms_noise_pct": 0.1,
-  "vendor_fields": {}
-}
-```
-
-## Canonical Schema
-
-The canonical schema (`CANONICAL_SPEC_KEYS` in specs.py) includes:
-
-### Optical Specifications
-- `wavelength_nm`: Center wavelength in nanometers
-- `output_power_mw_nominal`: Nominal output power in milliwatts
-- `output_power_mw_min`: Minimum guaranteed power
-- `output_power_mw_max`: Maximum power capability
-- `linewidth_mhz`: Spectral linewidth in MHz
-- `linewidth_nm`: Spectral linewidth in nm
-- `m2`: Beam quality factor (M²)
-- `beam_diameter_mm`: Beam diameter at aperture
-
-### Stability Metrics
-- `rms_noise_pct`: RMS noise as percentage
-- `power_stability_pct`: Power stability over time
-- `wavelength_stability_pm_c`: Wavelength stability per °C
-
-### Modulation Capabilities
-- `ttl_shutter`: TTL modulation available (boolean)
-- `analog_modulation`: Analog modulation range
-- `analog_freq_limit_khz`: Analog bandwidth in kHz
-- `digital_freq_limit_khz`: Digital modulation bandwidth
-
-### Physical Properties
-- `warmup_minutes`: Warmup time to stable operation
-- `coherence_length_m`: Coherence length in meters
-- `polarization_ratio`: Polarization extinction ratio
-
-### Fiber Output
-- `fiber_output_available`: Fiber coupling option (boolean)
-- `fiber_na`: Numerical aperture
-- `fiber_core_diameter_um`: Core diameter in micrometers
-
-## Key Utility Functions
-
-### canonical_key() (from specs.py)
-Maps vendor-specific field names to canonical schema:
+The new system extracts individual models from families:
 
 ```python
-def canonical_key(vendor_key: str) -> str | None:
-    """
-    Examples:
-    - "Wavelength" → "wavelength_nm"
-    - "Output Power" → "output_power_mw_nominal"
-    - "RMS Noise" → "rms_noise_pct"
-    - "Beam Quality" → "m2"
-    """
-```
-
-### parse_value_to_unit() (from specs.py)
-Parses values with units to numeric representations:
-
-```python
-def parse_value_to_unit(canonical_key: str, value: str) -> float | str | bool | None:
-    """
-    Examples:
-    - "488 nm" → 488.0
-    - "< 0.2 %" → 0.2
-    - "≤ 1.2" → 1.2
-    - "Yes" → True
-    - "10-45°C" → "10-45°C" (preserved as string)
-    """
-```
-
-## LLM Integration (llm.py)
-
-When heuristics fail (< 4 fields mapped), the system uses OpenAI's structured output:
-
-```python
-def llm_normalize(raw_specs: dict, text_blob: str, model: str = None) -> dict:
-    """
-    Uses OpenAI with json_schema response format to ensure valid output.
+def extract_models_from_specs(raw_specs: dict) -> List[dict]:
+    """Extract individual laser models from concatenated specs."""
+    models = []
     
-    Model selection:
-    - Default: gpt-4o-mini (fast, cost-effective)
-    - Optional: gpt-4o (more accurate)
-    - Configurable via --model CLI flag or OPENAI_MODEL env var
-    """
+    # Pattern for OBIS models
+    pattern = r'OBIS\s+(\w+)\s+(\d+)\s*nm.*?(\d+)\s*mW'
+    
+    for text in raw_specs.values():
+        for match in re.finditer(pattern, str(text)):
+            model_name, wavelength, power = match.groups()
+            models.append({
+                'name': f'OBIS {model_name} {wavelength}nm',
+                'wavelength_nm': float(wavelength),
+                'output_power_mw_nominal': float(power)
+            })
+    
+    return models
 ```
 
-**Structured Output Schema:**
+**Result**: Extracts individual models instead of treating entire families as single items
+
+## Improved Spec Name Cleaning
+
+### Problem: Malformed Keys with Footnotes
+
+Raw extraction produced keys like:
+```python
+"Wavelength (nm) 1 2 3" → Multiple footnotes
+"Output Power (mW) †"   → Special characters
+"M² < 1.2 4"           → Mixed units and footnotes
+```
+
+### Solution: Clean Spec Names
+
+```python
+def _clean_spec_name(self, spec_name: str) -> str:
+    """Clean spec names for better normalization."""
+    import re
+    
+    # Remove footnote numbers anywhere
+    cleaned = re.sub(r'\s+\d+\s*', ' ', spec_name)
+    
+    # Remove units in parentheses
+    cleaned = re.sub(r'\s*\([^)]+\)', '', cleaned)
+    
+    # Remove special characters
+    cleaned = re.sub(r'[†‡§¶]', '', cleaned)
+    
+    # Normalize whitespace
+    cleaned = ' '.join(cleaned.split())
+    
+    return cleaned
+```
+
+**Result**: Clean keys that map correctly to canonical schema
+
+## Batch Normalization with Parallel Processing
+
+### Traditional Sequential Processing
+```python
+# Old: Process one model at a time
+for model in models:
+    normalized = normalize_single(model)  # Slow!
+    save(normalized)
+```
+
+### New Parallel Batch Processing
+```python
+def normalize_all_batch(use_llm=True, max_workers=5):
+    """Batch normalization with parallel LLM calls."""
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all models for parallel processing
+        futures = []
+        for model_specs in all_models:
+            future = executor.submit(normalize_model, model_specs)
+            futures.append(future)
+        
+        # Collect results as they complete
+        for future in as_completed(futures):
+            result = future.result()
+            save_normalized(result)
+```
+
+**Benefit**: Parallel processing improves throughput
+
+## LLM Enhancement Strategy
+
+### Intelligent LLM Usage
+
+The system only calls OpenAI when necessary:
+
+```python
+def needs_llm_enhancement(canonical_specs: dict) -> bool:
+    """Determine if LLM help is needed."""
+    
+    # Count populated fields
+    populated = sum(1 for v in canonical_specs.values() if v is not None)
+    
+    # Need LLM if < 4 critical fields mapped
+    critical_fields = ['wavelength_nm', 'output_power_mw_nominal', 
+                      'rms_noise_pct', 'beam_diameter_mm']
+    
+    critical_populated = sum(1 for f in critical_fields 
+                           if canonical_specs.get(f) is not None)
+    
+    return critical_populated < 4
+```
+
+### Structured LLM Output
+
+Using OpenAI's JSON schema for guaranteed valid output:
+
+```python
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[
+        {"role": "system", "content": EXTRACTION_PROMPT},
+        {"role": "user", "content": f"Extract specs from: {raw_specs}"}
+    ],
+    response_format={
+        "type": "json_schema",
+        "json_schema": {
+            "name": "laser_specs",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "wavelength_nm": {"type": ["number", "null"]},
+                    "output_power_mw_nominal": {"type": ["number", "null"]},
+                    # ... other fields
+                }
+            }
+        }
+    }
+)
+```
+
+## Real-World Examples
+
+### Example 1: Coherent OBIS Family
+
+**Raw PDF content** (concatenated table):
+```
+OBIS LX 375 375nm 16mW OBIS LX 405 405nm 50mW OBIS LX 445 445nm 75mW...
+```
+
+**After extraction and cleaning**:
+```python
+models = [
+    {"name": "OBIS LX 375", "Wavelength": "375", "Output Power": "16"},
+    {"name": "OBIS LX 405", "Wavelength": "405", "Output Power": "50"},
+    {"name": "OBIS LX 445", "Wavelength": "445", "Output Power": "75"}
+]
+```
+
+**After normalization**:
+```python
+normalized = [
+    {
+        "product_name": "OBIS LX 375",
+        "wavelength_nm": 375.0,
+        "output_power_mw_nominal": 16.0,
+        "manufacturer": "Coherent"
+    },
+    {
+        "product_name": "OBIS LX 405", 
+        "wavelength_nm": 405.0,
+        "output_power_mw_nominal": 50.0,
+        "manufacturer": "Coherent"
+    }
+]
+```
+
+### Example 2: Hübner Photonics Cobolt
+
+**Raw specs with footnotes**:
 ```json
 {
-  "type": "object",
-  "properties": {
-    "wavelength_nm": {"type": ["number", "null"]},
-    "output_power_mw_nominal": {"type": ["number", "null"]},
-    "rms_noise_pct": {"type": ["number", "null"]},
-    ...
-  }
+    "Wavelength 1 2": "561 nm",
+    "Output power 3 4": "100 mW",
+    "RMS noise (20 Hz - 20 MHz) 5": "< 0.3 %"
 }
 ```
 
-## Database Storage
-
-Normalized specs are stored in the `normalized_specs` table:
-
-```sql
-CREATE TABLE normalized_specs (
-    id INTEGER PRIMARY KEY,
-    product_id INTEGER REFERENCES products(id),
-    source_raw_id INTEGER REFERENCES raw_documents(id),
-    wavelength_nm REAL,
-    output_power_mw_nominal REAL,
-    output_power_mw_min REAL,
-    output_power_mw_max REAL,
-    rms_noise_pct REAL,
-    power_stability_pct REAL,
-    linewidth_mhz REAL,
-    linewidth_nm REAL,
-    m2 REAL,
-    beam_diameter_mm REAL,
-    ttl_shutter BOOLEAN,
-    analog_modulation TEXT,
-    vendor_fields JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+**After cleaning**:
+```json
+{
+    "Wavelength": "561 nm",
+    "Output power": "100 mW", 
+    "RMS noise": "< 0.3 %"
+}
 ```
 
-## Error Handling
+**After normalization**:
+```python
+{
+    "wavelength_nm": 561.0,
+    "output_power_mw_nominal": 100.0,
+    "rms_noise_pct": 0.3
+}
+```
 
-The normalization system is designed to be resilient:
+### Example 3: LLM Enhancement for Unusual Fields
 
-1. **Missing raw_specs**: Falls back to simple text extraction
-2. **LLM failures**: Preserves heuristic results
-3. **Invalid values**: Returns None for unparseable fields
-4. **Duplicate products**: Uses latest document (ordered by fetched_at)
+**Vendor-specific naming**:
+```json
+{
+    "λ": "532nm",
+    "P_out": "200mW",
+    "Noise (rms)": "0.1%",
+    "TEM_00": ">99%"
+}
+```
 
-## Usage in CLI
+**Heuristics fail** (only 1 field mapped):
+```python
+{
+    "wavelength_nm": None,  # "λ" not recognized
+    "output_power_mw_nominal": None,  # "P_out" not recognized
+    "rms_noise_pct": 0.1,  # Pattern matched
+    "tem00_pct": None  # "TEM_00" not recognized
+}
+```
 
+**LLM correctly interprets**:
+```python
+{
+    "wavelength_nm": 532.0,  # λ = wavelength
+    "output_power_mw_nominal": 200.0,  # P_out = power output
+    "rms_noise_pct": 0.1,
+    "tem00_pct": 99.0  # TEM00 mode purity
+}
+```
+
+## Metrics to Track
+
+Once in production, we plan to measure:
+
+### Extraction Metrics
+- Percentage of clean spec keys extracted
+- Number of individual models vs product families
+- Processing time per PDF
+- Success rate by vendor
+
+### Normalization Metrics  
+- Fields mapped by heuristics alone
+- Fields requiring LLM enhancement
+- Coverage percentage per vendor
+- Processing time comparison (sequential vs parallel)
+
+## Key Functions Reference
+
+### normalize_batch.py
+```python
+def normalize_all_batch(use_llm=True, max_workers=5):
+    """Main entry point for batch normalization."""
+
+def process_product_batch(products: List[Product], use_llm: bool):
+    """Process a batch of products in parallel."""
+
+def normalize_model_specs(model_data: dict, use_llm: bool):
+    """Normalize specs for a single model."""
+```
+
+### extraction.py
+```python
+def _clean_spec_name(spec_name: str) -> str:
+    """Remove footnotes and units from spec names."""
+
+def extract_individual_models(raw_specs: dict) -> List[dict]:
+    """Extract individual SKUs from product families."""
+```
+
+### llm.py
+```python
+def llm_normalize_batch(models: List[dict], model="gpt-4o-mini"):
+    """Batch LLM normalization with structured output."""
+```
+
+## Configuration
+
+### Target Products (config/target_products.yml)
+```yaml
+vendors:
+  - name: Coherent
+    max_products: 100
+    segments:
+      - id: diode_instrumentation
+        product_patterns:
+          - "OBIS"
+          - "OBIS LX"
+          - "OBIS LS"
+          # ... 15 more patterns
+```
+
+### Environment Variables
 ```bash
-# Run full pipeline including normalization
-uv run python -m src.laser_ci_lg.cli run
-
-# Run with specific LLM model
-uv run python -m src.laser_ci_lg.cli run --model gpt-4o
-
-# Skip LLM normalization (heuristics only)
-uv run python -m src.laser_ci_lg.cli run --no-llm
+OPENAI_API_KEY=sk-...        # Required for LLM
+OPENAI_MODEL=gpt-4o-mini    # Optional model override
+MAX_WORKERS=5                # Parallel processing threads
 ```
-
-## Performance Considerations
-
-- **Batch Processing**: Groups documents by product to minimize database queries
-- **LLM Optimization**: Only calls OpenAI when heuristics yield < 4 fields
-- **Caching**: Uses content hashing to avoid re-processing unchanged documents
-- **Model Selection**: Default gpt-4o-mini balances cost and quality
 
 ## Troubleshooting
 
-### Common Issues
+### Low Normalization Rate
+1. Check if spec names need cleaning
+2. Add patterns to canonical_key() mapping
+3. Verify LLM is enabled with --use-llm
 
-1. **Low field mapping rate**
-   - Check vendor field names in raw_specs
-   - Add mappings to canonical_key() function
-   - Consider vendor-specific extraction logic
+### Duplicate Models
+1. Check extraction patterns for overlaps
+2. Verify model name uniqueness
+3. Review database constraints
 
-2. **LLM timeouts**
-   - Reduce text_blob size (uses first 2 documents only)
-   - Switch to faster model (gpt-4o-mini)
-   - Increase timeout in OpenAI client
-
-3. **Incorrect unit parsing**
-   - Review parse_value_to_unit() patterns
-   - Add vendor-specific unit formats
-   - Preserve original values in vendor_fields
+### LLM Timeouts
+1. Reduce batch size (max_workers)
+2. Use faster model (gpt-4o-mini)
+3. Check OpenAI API status
 
 ## Summary
 
-The normalization system is the critical bridge between raw vendor data and standardized competitive intelligence. It combines deterministic heuristics with AI-powered fallbacks to achieve high extraction rates while maintaining data quality. The normalized data enables meaningful cross-vendor comparisons and powers the competitive analysis reports.
+The enhanced normalization system provides:
+- Individual model extraction from product families
+- Clean spec extraction with footnote removal
+- Parallel batch processing for efficiency
+- LLM fallback for improved normalization coverage
+- Structured output guarantees from OpenAI
+
+This enables accurate competitive analysis with complete, normalized specifications for every laser model tracked in the system.

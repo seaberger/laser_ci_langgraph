@@ -4,6 +4,8 @@
 
 The LASER-CI-LG command-line interface provides comprehensive control over the competitive intelligence pipeline. All commands are accessed through the main `cli.py` module.
 
+**v2.0 Updates**: The pipeline now uses DuckDuckGo search for product discovery, enabling faster and more reliable discovery. Features include individual SKU extraction and improved normalization with parallel LLM processing.
+
 ## Installation & Setup
 
 ### Prerequisites
@@ -28,7 +30,7 @@ The LASER-CI-LG command-line interface provides comprehensive control over the c
 
 ### 1. `run` - Execute Pipeline
 
-Runs the complete competitive intelligence pipeline or specific scrapers.
+Runs the complete competitive intelligence pipeline including discovery, extraction, normalization, and reporting.
 
 ```bash
 uv run python -m src.laser_ci_lg.cli run [OPTIONS]
@@ -42,7 +44,7 @@ uv run python -m src.laser_ci_lg.cli run [OPTIONS]
 | `--use-llm/--no-llm` | BOOL | True | Enable/disable LLM for spec normalization |
 | `--config-path` | PATH | config/competitors.yml | Path to configuration file |
 | `--force-refresh` | BOOL | False | Force re-download all documents |
-| `--scraper` | TEXT | None | Run specific scraper only |
+| `--scraper` | TEXT | None | Run specific vendor only |
 
 #### Examples
 
@@ -89,12 +91,12 @@ uv run python -m src.laser_ci_lg.cli run --scraper coherent --force-refresh --mo
 #### Output
 
 The command displays:
-1. Pipeline progress through each node
-2. Extraction statistics per vendor
-3. Normalization results
+1. Discovery progress (products found via search)
+2. Extraction statistics per vendor  
+3. Normalization results (heuristic vs LLM)
 4. Generated competitive report
 5. Benchmark comparison table
-6. Any errors encountered
+6. Processing time and efficiency metrics
 
 ### 2. `schedule` - Schedule Periodic Runs
 

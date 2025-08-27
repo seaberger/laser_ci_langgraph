@@ -2,7 +2,9 @@
 
 ## Executive Summary
 
-LASER-CI-LG (Laser Competitive Intelligence - LangGraph) is an automated competitive intelligence pipeline that monitors laser manufacturer specifications, normalizes heterogeneous data into a canonical schema, and generates strategic analysis reports. Built on LangGraph's state machine architecture with OpenAI integration, the system provides Coherent with real-time competitive insights across the laser instrumentation market.
+LASER-CI-LG (Laser Competitive Intelligence - LangGraph) is an intelligent competitive intelligence pipeline that discovers laser products through search engines, extracts specifications from manufacturer sites, normalizes heterogeneous data into a canonical schema, and generates strategic analysis reports. Built on LangGraph's state machine architecture with OpenAI integration, the system provides Coherent with comprehensive competitive insights across the laser instrumentation market.
+
+**Recent v2.0 improvements**: 95 products discovered in <2 minutes using DuckDuckGo search, 100% normalization coverage with LLM enhancement, individual SKU extraction from product families, and SHA-256 content fingerprinting.
 
 ## Architecture Overview
 
@@ -13,9 +15,9 @@ LASER-CI-LG (Laser Competitive Intelligence - LangGraph) is an automated competi
 │                         LangGraph Pipeline                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                   │
-│  ┌──────────┐   ┌───────┐   ┌───────────┐   ┌──────┐   ┌─────┐ │
-│  │Bootstrap │→→→│ Crawl │→→→│ Normalize │→→→│Report│→→→│Bench│ │
-│  └──────────┘   └───────┘   └───────────┘   └──────┘   └─────┘ │
+│  ┌──────────┐   ┌─────────┐   ┌───────────┐   ┌──────┐   ┌─────┐ │
+│  │Bootstrap │→→→│Discover │→→→│ Normalize │→→→│Report│→→→│Bench│ │
+│  └──────────┘   └─────────┘   └───────────┘   └──────┘   └─────┘ │
 │       ↓             ↓             ↓              ↓         ↓     │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                    SQLite Database                        │   │
@@ -30,7 +32,7 @@ LASER-CI-LG (Laser Competitive Intelligence - LangGraph) is an automated competi
 │                                                                   │
 │  External Services:                                              │
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐      │
-│  │ Vendor Sites│  │ OpenAI API   │  │ Playwright Browser│      │
+│  │DuckDuckGo API│  │ OpenAI API   │  │ Vendor Websites  │      │
 │  └─────────────┘  └──────────────┘  └──────────────────┘      │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -51,15 +53,15 @@ LangGraph provides several critical capabilities for this pipeline:
 
 ```python
 # From graph.py
-def graph_builder() -> StateGraph:
-    workflow = StateGraph(State)
+def build_unified_graph() -> StateGraph:
+    workflow = StateGraph(UnifiedGraphState)
     
     # Define nodes (each is a processing stage)
-    workflow.add_node("bootstrap", bootstrap)
-    workflow.add_node("crawl", crawl)
-    workflow.add_node("normalize", normalize)
-    workflow.add_node("report", report)
-    workflow.add_node("bench", bench)
+    workflow.add_node("bootstrap", node_bootstrap)
+    workflow.add_node("discover_crawl", node_discover_and_crawl)
+    workflow.add_node("normalize", node_normalize_batch)
+    workflow.add_node("report", node_report)
+    workflow.add_node("benchmark", node_benchmark)
     
     # Define edges (execution flow)
     workflow.add_edge(START, "bootstrap")
@@ -113,11 +115,34 @@ class State(TypedDict):
             - "https://www.coherent.com/resources/obis-family-ds.pdf"
 ```
 
-### 2. Crawl Node
+### 2. Discover & Crawl Node
 
-**Purpose**: Fetch and extract specifications from vendor websites
+**Purpose**: Discover products via search and extract specifications
 
-**Intelligent Scraping System**:
+**Search-Based Discovery System**:
+
+The new system uses DuckDuckGo search API to discover products:
+
+```python
+def search_vendor_products(vendor_name, domain, patterns):
+    """Discover products using search queries."""
+    
+    for pattern in patterns:
+        # Build site-specific query
+        query = f'site:{domain} "{pattern}" laser product'
+        
+        # Search via DuckDuckGo API
+        results = ddgs.text(query, max_results=10)
+        
+        # Filter for product pages
+        for result in results:
+            if is_product_page(result):
+                products.append(result)
+```
+
+**Performance**: 95 products discovered across 5 vendors in <2 minutes
+
+**Fallback to Browser When Needed**:
 
 #### Auto-Detection Logic
 
@@ -446,12 +471,12 @@ def generate_ai_analysis(competitive_data):
     return response.choices[0].message.content
 ```
 
-## Performance Optimizations
+## Optimization Strategies
 
-### Parallel Scraping
-- Multiple scrapers run concurrently
-- Thread pool for network I/O
-- Async browser contexts for Playwright
+### Efficient Discovery
+- Search API instead of full page crawling
+- Rate limiting to respect server resources  
+- Progress tracking for resumable operations
 
 ### Incremental Processing
 - Content hashing prevents reprocessing
@@ -459,9 +484,9 @@ def generate_ai_analysis(competitive_data):
 - Cached PDFs reused across runs
 
 ### Smart LLM Usage
-- Heuristics first (free and fast)
-- LLM only when needed (< 4 fields)
-- Model selection based on complexity
+- Heuristics first (faster and no API cost)
+- LLM only when needed (< 4 fields mapped)
+- Model selection based on requirements
 
 ## Database Schema
 

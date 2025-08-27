@@ -4,7 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Laser CI (Competitive Intelligence) - An automated pipeline for monitoring laser manufacturer specifications, built on LangGraph with OpenAI for intelligent spec normalization. The system crawls manufacturer sites for diode/instrumentation lasers and light engines, normalizes heterogeneous specs into a canonical schema, and benchmarks competitors against Coherent models.
+Sightline Laser CI Module - A competitive intelligence component of the Sightline suite (enterprise and SMB apps for knowledge engine, product finder, strategic marketing and competitive analysis). Built on LangGraph with OpenAI for intelligent spec normalization. 
+
+**v2.0 Architecture** (Current):
+- **Search-based Discovery**: Uses DuckDuckGo API instead of Playwright for efficient product discovery
+- **Enhanced Extraction**: Cleans spec names, removes footnotes, extracts individual SKUs from product families
+- **Smart Caching**: SHA-256 content fingerprinting prevents reprocessing unchanged content
+- **Unified Pipeline**: All vendors use unified base scraper with optional customization
+- **Parallel Processing**: Batch normalization with ThreadPoolExecutor for LLM calls
+
+The system discovers laser products via search, extracts specs from HTML/PDFs, normalizes heterogeneous specs into a canonical schema, and benchmarks competitors against Coherent models.
 
 ## Development Commands
 
@@ -43,13 +52,13 @@ echo "OPENAI_API_KEY=sk-..." > .env
 
 ## Architecture
 
-### LangGraph Pipeline Flow
-The system uses a linear LangGraph state machine with these nodes:
-1. **bootstrap** - Initialize SQLite DB and seed manufacturers/products from config
-2. **crawl** - Fetch HTML/PDF documents from vendor sites
+### Unified Pipeline Flow (v2.0)
+The system uses a discovery-first approach with these phases:
+1. **discover** - Search for products using DuckDuckGo API with vendor-specific patterns
+2. **extract** - Fetch HTML/PDF documents, clean spec names, extract individual SKUs
 3. **normalize** - Convert raw specs to canonical schema (heuristics first, LLM fallback)
-4. **report** - Generate monthly delta reports
-5. **bench** - Compare competitor specs against Coherent baselines
+4. **analyze** - Group by wavelength/power class for competitive analysis
+5. **report** - Generate comparison matrices and strategic insights
 
 ### Key Components
 
@@ -59,18 +68,23 @@ The system uses a linear LangGraph state machine with these nodes:
 - `RawDocument` - Scraped HTML/PDF content with extracted k/v pairs
 - `NormalizedSpec` - Canonical schema snapshots for time-series tracking
 
-**Spec Normalization** (`normalize.py` + `llm.py`):
+**Spec Normalization** (`normalize_batch.py` + `llm.py`):
+- Extract individual models from product families (e.g., OBIS LX 375, OBIS LX 405)
+- Clean spec names: remove footnotes, units, special characters
 - Heuristic mapping attempts to match vendor field names to canonical schema
 - Falls back to OpenAI structured JSON when <4 fields mapped
+- Parallel batch processing with ThreadPoolExecutor
 - LLM uses `response_format: json_schema` for guaranteed well-formed output
 
-**Scrapers** (`scrapers/`):
-- Base scraper handles HTML/PDF fetching and text extraction
-- Vendor-specific scrapers inherit from `BaseScraper`
-- Add custom parsing logic per vendor as needed
+**Unified Scraper System** (`scrapers/unified_base.py`):
+- **UnifiedBaseScraper**: Base class handling all discovery and extraction
+- Smart discovery via DuckDuckGo search with product patterns
+- PDF discovery on product pages
+- SHA-256 content fingerprinting for change detection
+- Vendor-specific scrapers need only 10 lines of code
 
 **Configuration** (`config/`):
-- `competitors.yml` - Vendor URLs, product links, datasheet PDFs
+- `target_products.yml` - Search patterns for discovery, 98 specific laser models
 - `segments.yml` - Product categories (diode_instrumentation, light_engines)
 
 ### Database Schema
@@ -124,82 +138,90 @@ Example: `data/pdf_cache/omicron/luxx_plus_datasheet201901.pdf`
 - Model defaults to `gpt-4o-mini`, configurable via CLI or env var
 - Only triggers LLM when heuristic mapping yields insufficient fields
 
-## Scraper Architecture
+## Unified Scraper Architecture (v2.0)
 
-### Base Scraper Pattern
-All scrapers inherit from `BaseScraper` which provides:
-- `iter_targets()` - Yields product URLs and datasheets from config
-- `fetch_with_cache()` - Fetches with caching, deduplication, and extraction
-- `store_document()` - Handles database storage with duplicate detection
+### Minimal Unified Scraper Implementation
+All new scrapers should use the unified base class:
 
-### Minimal Scraper Implementation
 ```python
-from .base import BaseScraper
-from ..db import SessionLocal
+from .unified_base import UnifiedBaseScraper
 
-class VendorNameScraper(BaseScraper):
-    def vendor(self) -> str:
-        return "VendorName"
+class UnifiedNewVendorScraper(UnifiedBaseScraper):
+    """Unified scraper for NewVendor with search discovery."""
     
-    def run(self):
-        s = SessionLocal()
-        try:
-            for tgt in self.iter_targets():
-                status, content_type, text, content_hash, file_path, raw_specs = self.fetch_with_cache(tgt["url"])
-                self.store_document(s, tgt, status, content_type, text, 
-                                  content_hash, file_path, raw_specs)
-            s.commit()
-        finally:
-            s.close()
+    def vendor(self) -> str:
+        """Return vendor name matching config file."""
+        return "NewVendor"
+    
+    def __init__(self, config_path: str = "config/target_products.yml", 
+                 force_refresh: bool = False):
+        """Initialize with target products configuration."""
+        super().__init__(config_path, force_refresh)
 ```
 
-### Key Methods from BaseScraper
-- **vendor()**: Return vendor display name (required override)
-- **run()**: Main entry point for scraping (required override)
-- **fetch_with_cache(url)**: Returns tuple (status, content_type, text, hash, path, specs)
-  - Automatically caches PDFs to `data/pdf_cache/vendor/`
-  - Calculates content hashes for duplicate detection
-  - Extracts specs using HTML/PDF extraction system
-- **store_document()**: Handles database storage
-  - Skips unchanged documents (same hash)
-  - Updates changed documents
-  - Inserts new documents
+That's it! The base class handles:
+- Search-based discovery via DuckDuckGo
+- PDF discovery on product pages
+- SHA-256 content fingerprinting
+- Database storage
+- Caching
 
-## Adding New Vendors
+### Key Methods from UnifiedBaseScraper
+- **discover_products_smart()**: Search-based discovery using DuckDuckGo
+- **discover_pdfs_on_page()**: Find PDF links on product pages
+- **process_document()**: Extract specs with fingerprinting
+- **run()**: Orchestrates discovery → extraction → storage
 
-1. **Add vendor config** to `config/competitors.yml`:
+## Adding New Vendors (v2.0)
+
+1. **Configure target products** in `config/target_products.yml`:
 ```yaml
-  - name: VendorName
-    homepage: "https://vendor.com"
+vendors:
+  - name: "NewVendor"
+    homepage: "https://www.newvendor.com"
+    discovery_mode: "smart"  # Use search-based discovery
+    max_products: 50
     segments:
       - id: diode_instrumentation
-        products:
-          - name: "Model XYZ"
-            product_url: "https://vendor.com/xyz"
-            datasheets:
-              - "https://vendor.com/xyz.pdf"
+        product_patterns:  # Search patterns
+          - "ModelX"
+          - "ModelY 532"
+          - "SeriesZ"
+        include_categories:  # Required keywords
+          - "laser"
+          - "diode"
+        exclude_categories:  # Excluded keywords
+          - "accessories"
+          - "mounts"
 ```
 
-2. **Create scraper** in `src/laser_ci_lg/scrapers/vendorname.py`:
-   - Copy minimal implementation pattern above
-   - Use existing scrapers as reference (omicron_luxx.py is simplest)
+2. **Create unified scraper** in `src/laser_ci_lg/scrapers/unified_newvendor.py`:
+```python
+from .unified_base import UnifiedBaseScraper
 
-3. **Register in crawler** (`src/laser_ci_lg/crawler.py`):
-   - Add import: `from .scrapers.vendorname import VendorNameScraper`
-   - Add to mappings for CLI filter support
-   - Add instantiation in vendor name check
+class UnifiedNewVendorScraper(UnifiedBaseScraper):
+    def vendor(self) -> str:
+        return "NewVendor"
+    
+    def __init__(self, config_path: str = "config/target_products.yml", 
+                 force_refresh: bool = False):
+        super().__init__(config_path, force_refresh)
+```
+
+3. **Register in unified crawler** (`src/laser_ci_lg/crawler_unified.py`):
+   - Add import: `from .scrapers.unified_newvendor import UnifiedNewVendorScraper`
+   - Add to run_unified_scrapers() function
 
 4. **Test the scraper**:
 ```bash
-# Run just your scraper
-uv run python -m src.laser_ci_lg.cli run --scraper vendorname
+# Test discovery
+uv run python -m src.laser_ci_lg.cli run --scraper newvendor
 
-# Clean and re-run if needed
-uv run python -m src.laser_ci_lg.cli clean vendorname
-uv run python -m src.laser_ci_lg.cli run --scraper vendorname
+# Force refresh if needed
+uv run python -m src.laser_ci_lg.cli run --scraper newvendor --force-refresh
 ```
 
-For full scraper development guide, see `src/laser_ci_lg/scrapers/README.md`
+For detailed guide, see `docs/ADDING_NEW_VENDOR_GUIDE.md`
 
 ## Canonical Spec Schema
 
@@ -210,6 +232,44 @@ Core fields normalized across all vendors:
 - Fiber: output availability, NA, mode field diameter
 - Physical: dimensions, interfaces, warmup time
 - Unmapped specs stored in `vendor_fields` JSON
+
+## Recent Improvements (v2.0)
+
+### Search-Based Discovery
+- Replaced Playwright crawling with DuckDuckGo search API
+- Queries like `site:coherent.com "OBIS" laser` find products efficiently
+- Automatic PDF discovery on product pages
+
+### Enhanced Extraction
+- **Clean spec names**: Remove footnotes (¹²³), units, special characters
+- **Individual SKU extraction**: Split product families into individual models
+- Example: "OBIS Family" → OBIS LX 375, OBIS LX 405, OBIS LX 445
+
+### Improved Normalization
+- Parallel batch processing with ThreadPoolExecutor
+- LLM fallback when heuristics map <4 fields
+- OpenAI structured output guarantees valid JSON
+
+### Smart Caching
+- SHA-256 content fingerprinting prevents reprocessing
+- PDF cache in `data/pdf_cache/<vendor>/`
+- Discovery results cached to avoid repeated searches
+
+## Current Development Status
+
+**In Development** - No production metrics yet. Focus areas:
+- Refining search patterns for better discovery
+- Improving spec extraction accuracy
+- Optimizing LLM usage for normalization
+- Building comprehensive test suite
+
+## Key Files to Know
+
+- `config/target_products.yml` - 98 specific laser models configured
+- `src/laser_ci_lg/scrapers/unified_base.py` - Core discovery/extraction logic
+- `src/laser_ci_lg/normalize_batch.py` - Batch normalization with LLM
+- `src/laser_ci_lg/extraction.py` - Spec cleaning and SKU extraction
+- `docs/ADDING_NEW_VENDOR_GUIDE.md` - Complete vendor addition guide
 
 ## Monthly Reporting
 
